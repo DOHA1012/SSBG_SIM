@@ -1,48 +1,67 @@
 const express = require("express");
 const router = express.Router();
-const {
-  getAttendance,
-  getAssignment
-} = require("../services/schoolService");
+const { getOrCreateUser, applySchoolReward, spendGold } = require("../services/userService");
 
-// 보상 계산 함수
-function calculateReward(attendance, assignment) {
-  const attendanceCount = attendance.filter(
-    a => a.status === "출석"
-  ).length;
+// 1. 학교서버 → 게임서버 웹훅 (학교서버가 푸시)
+router.post("/school-webhook", async (req, res) => {
+  const { userId, attendanceCount, assignmentCount } = req.body;
 
-  const assignmentCount = assignment.filter(
-    a => a.status === "제출"
-  ).length;
-
-  const gold = attendanceCount * 100;
-  const exp = assignmentCount * 50;
-
-  return { gold, exp, attendanceCount, assignmentCount };
-}
-
-// 핵심 API
-router.post("/sync-eclass", async (req, res) => {
-  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: "userId 필요" });
+  }
 
   try {
-    const attendance = await getAttendance(userId);
-    const assignment = await getAssignment(userId);
-
-    const reward = calculateReward(attendance, assignment);
-
-    res.json({
-      userId,
-      ...reward,
-      message: "동기화 완료"
-    });
-
+    const updated = applySchoolReward(userId, attendanceCount, assignmentCount);
+    console.log(`[Webhook] ${userId} 재화 갱신 완료:`, updated);
+    res.json({ success: true, user: updated });
   } catch (err) {
-    res.status(500).json({
-      error: "서버 오류",
-      detail: err.message
-    });
+    res.status(500).json({ error: err.message });
   }
 });
+
+// 2. 클라이언트 접속 시 유저 데이터 요청
+router.post("/login", (req, res) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: "userId 필요" });
+  }
+
+  try {
+    const user = getOrCreateUser(userId);
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. 클라이언트 → 재화 사용 요청
+router.post("/spend-gold", (req, res) => {
+  const { userId, amount } = req.body;
+
+  if (!userId || amount == null) {
+    return res.status(400).json({ error: "userId, amount 필요" });
+  }
+
+  try {
+    const result = spendGold(userId, amount);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. 유저 현재 상태 조회 
+router.get("/user/:userId", (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const user = getOrCreateUser(userId);
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 module.exports = router;

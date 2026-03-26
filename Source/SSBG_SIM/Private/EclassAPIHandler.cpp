@@ -1,5 +1,4 @@
-// EclassAPIHandler.cpp
-#include "EclassAPIHandler.h"
+﻿#include "EclassAPIHandler.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Interfaces/IHttpRequest.h"
@@ -7,74 +6,138 @@
 #include "Serialization/JsonSerializer.h"
 #include "Kismet/GameplayStatics.h"
 #include "EclassSaveGame.h"
-#include "Engine/DataTable.h"
-#include "EclassTableRow.h"
 
 FEclassData UEclassAPIHandler::CachedData;
 
-void UEclassAPIHandler::SyncEclass(FString UserId)
+static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
+
+// 공통: JSON 파싱 헬퍼
+static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
+{
+    FEclassData Result;
+    if (!UserObj.IsValid()) return Result;
+
+    int32 G = 0, E = 0;
+    UserObj->TryGetNumberField(TEXT("gold"), G);
+    UserObj->TryGetNumberField(TEXT("exp"), E);
+    Result.Gold = G;
+    Result.Exp = E;
+    return Result;
+}
+
+// 1. Login - 접속 시 서버 DB에서 데이터 수신
+void UEclassAPIHandler::Login(FString UserId, FOnEclassDataReceived OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL("http://127.0.0.1:3000/api/sync-eclass");
+    Request->SetURL(GAME_SERVER + TEXT("/login"));
     Request->SetVerb("POST");
     Request->SetHeader("Content-Type", "application/json");
-
-    FString JsonBody = FString::Printf(TEXT("{\"userId\":\"%s\"}"), *UserId);
-    Request->SetContentAsString(JsonBody);
+    Request->SetContentAsString(
+        FString::Printf(TEXT("{\"userId\":\"%s\"}"), *UserId)
+    );
 
     Request->OnProcessRequestComplete().BindLambda(
-        [](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
-            if (bSuccess && Res.IsValid())
+            if (!bSuccess || !Res.IsValid())
             {
-                FString Response = Res->GetContentAsString();
-                UE_LOG(LogTemp, Warning, TEXT("Response: %s"), *Response);
-
-                TSharedPtr<FJsonObject> JsonObject;
-                TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response);
-
-                if (FJsonSerializer::Deserialize(Reader, JsonObject))
-                {
-                    // ����: TEXT() ��ũ�� �߰�
-                    int32 GoldVal = 0, ExpVal = 0;
-                    JsonObject->TryGetNumberField(TEXT("gold"), GoldVal);
-                    JsonObject->TryGetNumberField(TEXT("exp"), ExpVal);
-                    UEclassAPIHandler::CachedData.Gold = GoldVal;
-                    UEclassAPIHandler::CachedData.Exp = ExpVal;
-
-                    UE_LOG(LogTemp, Warning, TEXT("API Data - Gold: %d, Exp: %d"),
-                        UEclassAPIHandler::CachedData.Gold,
-                        UEclassAPIHandler::CachedData.Exp);
-
-                    UEclassAPIHandler::SaveEclassData();
-                }
+                UE_LOG(LogTemp, Error, TEXT("[Login] 요청 실패 - 로컬 데이터 사용"));
+                // 오프라인 폴백: 로컬 세이브 데이터 사용
+                UEclassAPIHandler::LoadEclassData();
+                OnComplete.ExecuteIfBound(UEclassAPIHandler::CachedData);
+                return;
             }
-            else
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
             {
-                UE_LOG(LogTemp, Error, TEXT("HTTP Request Failed"));
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    FEclassData Data = ParseUserJson(*UserObj);
+                    UEclassAPIHandler::ApplyAndCache(Data);
+                    OnComplete.ExecuteIfBound(Data);
+                }
             }
         });
 
     Request->ProcessRequest();
 }
 
+// 2. SpendGold - 재화 사용 요청
+void UEclassAPIHandler::SpendGold(FString UserId, int32 Amount, FOnSpendGoldResult OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/spend-gold"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(
+        FString::Printf(TEXT("{\"userId\":\"%s\",\"amount\":%d}"), *UserId, Amount)
+    );
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[SpendGold] 요청 실패"));
+                OnComplete.ExecuteIfBound(false);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bSuccess2 = false;
+                Root->TryGetBoolField(TEXT("success"), bSuccess2);
+
+                if (bSuccess2)
+                {
+                    // 서버에서 돌아온 최신 재화로 캐시 갱신
+                    const TSharedPtr<FJsonObject>* UserObj;
+                    if (Root->TryGetObjectField(TEXT("current"), UserObj))
+                    {
+                        FEclassData Data = ParseUserJson(*UserObj);
+                        UEclassAPIHandler::ApplyAndCache(Data);
+                    }
+                }
+
+                OnComplete.ExecuteIfBound(bSuccess2);
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+// 3. 캐시 반환 / 저장 / 불러오기
 FEclassData UEclassAPIHandler::GetEclassData()
 {
     return CachedData;
 }
 
+void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
+{
+    CachedData = NewData;
+    SaveEclassData(); // 서버 응답 받을 때마다 로컬에도 저장
+    UE_LOG(LogTemp, Warning, TEXT("[Cache] Gold: %d, Exp: %d"),
+        CachedData.Gold, CachedData.Exp);
+}
+
 void UEclassAPIHandler::SaveEclassData()
 {
-    UEclassSaveGame* SaveGameInstance =
-        Cast<UEclassSaveGame>(UGameplayStatics::CreateSaveGameObject(UEclassSaveGame::StaticClass()));
-
-    if (SaveGameInstance)
+    UEclassSaveGame* Save = Cast<UEclassSaveGame>(
+        UGameplayStatics::CreateSaveGameObject(UEclassSaveGame::StaticClass()));
+    if (Save)
     {
-        SaveGameInstance->Gold = CachedData.Gold;
-        SaveGameInstance->Exp = CachedData.Exp;
-
-        bool bSaved = UGameplayStatics::SaveGameToSlot(SaveGameInstance, TEXT("EclassSlot"), 0);
-        UE_LOG(LogTemp, Warning, TEXT("Save %s"), bSaved ? TEXT("Success") : TEXT("Failed"));
+        Save->Gold = CachedData.Gold;
+        Save->Exp = CachedData.Exp;
+        UGameplayStatics::SaveGameToSlot(Save, TEXT("EclassSlot"), 0);
     }
 }
 
@@ -82,36 +145,12 @@ void UEclassAPIHandler::LoadEclassData()
 {
     if (UGameplayStatics::DoesSaveGameExist(TEXT("EclassSlot"), 0))
     {
-        UEclassSaveGame* LoadGame =
-            Cast<UEclassSaveGame>(UGameplayStatics::LoadGameFromSlot(TEXT("EclassSlot"), 0));
-
-        if (LoadGame)
+        UEclassSaveGame* Load = Cast<UEclassSaveGame>(
+            UGameplayStatics::LoadGameFromSlot(TEXT("EclassSlot"), 0));
+        if (Load)
         {
-            CachedData.Gold = LoadGame->Gold;
-            CachedData.Exp = LoadGame->Exp;
-            UE_LOG(LogTemp, Warning, TEXT("Load Complete - Gold: %d, Exp: %d"),
-                CachedData.Gold,
-                CachedData.Exp);
+            CachedData.Gold = Load->Gold;
+            CachedData.Exp = Load->Exp;
         }
     }
-}
-
-FEclassData UEclassAPIHandler::GetDataFromTable(UDataTable* Table)
-{
-    FEclassData Result; // ����: ����ü �⺻��(Gold=0, Exp=0)���� �ʱ�ȭ��
-    if (!Table) return Result;
-
-    static const FString ContextString(TEXT("EclassData"));
-    FEclassTableRow* Row = Table->FindRow<FEclassTableRow>(TEXT("Player"), ContextString);
-
-    if (Row)
-    {
-        Result.Gold = Row->Gold;
-        Result.Exp = Row->Exp;
-        UE_LOG(LogTemp, Warning, TEXT("DataTable - Gold: %d, Exp: %d"),
-            Result.Gold,
-            Result.Exp);
-    }
-
-    return Result;
 }
