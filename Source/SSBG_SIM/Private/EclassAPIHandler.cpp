@@ -130,10 +130,14 @@ void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
 {
     CachedData = NewData;
     SaveEclassData(); // 서버 응답 받을 때마다 로컬에도 저장
-    UE_LOG(LogTemp, Warning, TEXT("[Cache] Gold: %d, Exp: %d"),
-        CachedData.Gold, CachedData.Exp);
-}
 
+    // 로그 출력 부분도 3종 재화에 맞게 수정합니다.
+    UE_LOG(LogTemp, Warning, TEXT("[Cache] Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
+        CachedData.AcademicCurrency,
+        CachedData.ExtraCurrency,
+        CachedData.IdleCurrency,
+        CachedData.Exp);
+}
 void UEclassAPIHandler::SaveEclassData()
 {
     UEclassSaveGame* Save = Cast<UEclassSaveGame>(
