@@ -17,14 +17,12 @@ async function getAssignment(userId) {
   return res.data.assignment;
 }
 
-// 보상 계산
 function calculateReward(attendance, assignment) {
   const attendanceCount = attendance.filter(a => a.status === "출석").length;
   const assignmentCount = assignment.filter(a => a.status === "제출").length;
   return { attendanceCount, assignmentCount };
 }
 
-// 게임서버로 웹훅 푸시
 async function pushToGameServer(userId, attendanceCount, assignmentCount) {
   try {
     const res = await axios.post(

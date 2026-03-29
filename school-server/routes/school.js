@@ -20,10 +20,13 @@ router.get("/assignment", (req, res) => {
   res.json({ userId, assignment: data.assignment });
 });
 
-// 학교 데이터 변동 시 게임서버로 푸시 
-// 실제 환경에서는 이 엔드포인트가 출석/과제 저장 시 자동 호출
+// 학교 데이터 변동 시 게임서버로 푸시
 router.post("/notify-update", async (req, res) => {
   const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: "userId required" });
+  }
 
   try {
     const attendance = await getAttendance(userId);

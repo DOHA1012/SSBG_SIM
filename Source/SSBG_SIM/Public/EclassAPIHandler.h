@@ -8,7 +8,9 @@ struct FEclassData
 {
     GENERATED_BODY()
 
-    UPROPERTY(BlueprintReadWrite) int32 Gold = 0;
+    UPROPERTY(BlueprintReadWrite) int32 AcademicCurrency = 0;
+    UPROPERTY(BlueprintReadWrite) int32 ExtraCurrency = 0;
+    UPROPERTY(BlueprintReadWrite) int32 IdleCurrency = 0;
     UPROPERTY(BlueprintReadWrite) int32 Exp = 0;
 };
 

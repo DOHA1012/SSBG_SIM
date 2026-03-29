@@ -11,9 +11,8 @@ struct FEclassTableRow : public FTableRowBase
 
 public:
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 Gold;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 Exp;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 AcademicCurrency = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 ExtraCurrency = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 IdleCurrency = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Exp = 0;
 };

@@ -1,5 +1,16 @@
 const db = require("../database/db");
 
+// 재화 지급 설정 (여기만 수정하면 됨)
+const REWARD_CONFIG = {
+  attendance: {
+    extraCurrency: 100,
+    exp: 30,
+  },
+  assignment: {
+    exp: 50,
+  }
+};
+
 // 유저 가져오기 (없으면 생성)
 function getOrCreateUser(userId) {
   let user = db.prepare(
@@ -8,7 +19,8 @@ function getOrCreateUser(userId) {
 
   if (!user) {
     db.prepare(
-      "INSERT INTO users (userId, gold, exp) VALUES (?, 0, 0)"
+      `INSERT INTO users (userId, academicCurrency, extraCurrency, idleCurrency, exp)
+       VALUES (?, 0, 0, 0, 0)`
     ).run(userId);
     user = db.prepare(
       "SELECT * FROM users WHERE userId = ?"
@@ -17,30 +29,35 @@ function getOrCreateUser(userId) {
   return user;
 }
 
-// 학교 데이터 기반 재화 갱신 (증분 방식 - 중복 지급 방지)
+// 학교 데이터 기반 재화 갱신 (증분 방식)
 function applySchoolReward(userId, newAttendance, newAssignment) {
-  const user = getOrCreateUser(userId);
+  getOrCreateUser(userId);
 
-  // 이전 스냅샷 가져오기
   const snapshot = db.prepare(
     "SELECT * FROM school_snapshots WHERE userId = ?"
   ).get(userId) || { attendanceCount: 0, assignmentCount: 0 };
 
-  // 증가분만 계산
   const deltaAttendance = Math.max(0, newAttendance - snapshot.attendanceCount);
   const deltaAssignment = Math.max(0, newAssignment - snapshot.assignmentCount);
 
-  const goldDelta = deltaAttendance * 100;
-  const expDelta  = deltaAssignment * 50;
+  const delta = {
+    academicCurrency: 0,
+    extraCurrency:    deltaAttendance * (REWARD_CONFIG.attendance.extraCurrency || 0),
+    idleCurrency:     0,
+    exp:              deltaAttendance * (REWARD_CONFIG.attendance.exp         || 0)
+                    + deltaAssignment * (REWARD_CONFIG.assignment.exp         || 0),
+  };
 
-  // 재화 업데이트
   db.prepare(`
     UPDATE users
-    SET gold = gold + ?, exp = exp + ?, updatedAt = datetime('now')
+    SET academicCurrency = academicCurrency + ?,
+        extraCurrency    = extraCurrency    + ?,
+        idleCurrency     = idleCurrency     + ?,
+        exp              = exp              + ?,
+        updatedAt        = datetime('now')
     WHERE userId = ?
-  `).run(goldDelta, expDelta, userId);
+  `).run(delta.academicCurrency, delta.extraCurrency, delta.idleCurrency, delta.exp, userId);
 
-  // 스냅샷 업데이트
   db.prepare(`
     INSERT INTO school_snapshots (userId, attendanceCount, assignmentCount, updatedAt)
     VALUES (?, ?, ?, datetime('now'))
@@ -50,20 +67,29 @@ function applySchoolReward(userId, newAttendance, newAssignment) {
       updatedAt       = excluded.updatedAt
   `).run(userId, newAttendance, newAssignment);
 
-  return db.prepare("SELECT * FROM users WHERE userId = ?").get(userId);
+  const updated = db.prepare("SELECT * FROM users WHERE userId = ?").get(userId);
+  console.log(`[DB] ${userId} 재화 갱신:`, updated);
+  return updated;
 }
 
-// 재화 차감 (아이템 구매 등)
-function spendGold(userId, amount) {
+// 재화 차감 (범용)
+function spendCurrency(userId, currencyType, amount) {
+  const validTypes = ["academicCurrency", "extraCurrency", "idleCurrency", "exp"];
+
+  if (!validTypes.includes(currencyType)) {
+    return { success: false, message: "Invalid currency type" };
+  }
+
   const user = getOrCreateUser(userId);
 
-  if (user.gold < amount) {
-    return { success: false, message: "골드 부족", current: user.gold };
+  if (user[currencyType] < amount) {
+    return { success: false, message: "Not enough currency", current: user };
   }
 
   db.prepare(`
     UPDATE users
-    SET gold = gold - ?, updatedAt = datetime('now')
+    SET ${currencyType} = ${currencyType} - ?,
+        updatedAt = datetime('now')
     WHERE userId = ?
   `).run(amount, userId);
 
@@ -73,4 +99,4 @@ function spendGold(userId, amount) {
   };
 }
 
-module.exports = { getOrCreateUser, applySchoolReward, spendGold };
+module.exports = { getOrCreateUser, applySchoolReward, spendCurrency };

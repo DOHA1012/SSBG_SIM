@@ -17,10 +17,15 @@ static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
     FEclassData Result;
     if (!UserObj.IsValid()) return Result;
 
-    int32 G = 0, E = 0;
-    UserObj->TryGetNumberField(TEXT("gold"), G);
+    int32 AC = 0, EC = 0, IC = 0, E = 0;
+    UserObj->TryGetNumberField(TEXT("academicCurrency"), AC);
+    UserObj->TryGetNumberField(TEXT("extraCurrency"), EC);
+    UserObj->TryGetNumberField(TEXT("idleCurrency"), IC);
     UserObj->TryGetNumberField(TEXT("exp"), E);
-    Result.Gold = G;
+
+    Result.AcademicCurrency = AC;
+    Result.ExtraCurrency = EC;
+    Result.IdleCurrency = IC;
     Result.Exp = E;
     return Result;
 }
@@ -135,7 +140,9 @@ void UEclassAPIHandler::SaveEclassData()
         UGameplayStatics::CreateSaveGameObject(UEclassSaveGame::StaticClass()));
     if (Save)
     {
-        Save->Gold = CachedData.Gold;
+        Save->AcademicCurrency = CachedData.AcademicCurrency;
+        Save->ExtraCurrency = CachedData.ExtraCurrency;
+        Save->IdleCurrency = CachedData.IdleCurrency;
         Save->Exp = CachedData.Exp;
         UGameplayStatics::SaveGameToSlot(Save, TEXT("EclassSlot"), 0);
     }
@@ -149,7 +156,9 @@ void UEclassAPIHandler::LoadEclassData()
             UGameplayStatics::LoadGameFromSlot(TEXT("EclassSlot"), 0));
         if (Load)
         {
-            CachedData.Gold = Load->Gold;
+            CachedData.AcademicCurrency = Load->AcademicCurrency;
+            CachedData.ExtraCurrency = Load->ExtraCurrency;
+            CachedData.IdleCurrency = Load->IdleCurrency;
             CachedData.Exp = Load->Exp;
         }
     }
