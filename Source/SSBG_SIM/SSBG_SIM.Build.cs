@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+
 using UnrealBuildTool;
 
 public class SSBG_SIM : ModuleRules
@@ -8,7 +9,7 @@ public class SSBG_SIM : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput","HTTP","Json","JsonUtilities" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
