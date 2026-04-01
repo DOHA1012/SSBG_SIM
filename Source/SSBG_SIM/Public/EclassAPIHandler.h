@@ -41,7 +41,9 @@ public:
     UFUNCTION(BlueprintCallable)
     static void LoadEclassData();
 
+    UFUNCTION(BlueprintCallable, Category = "Eclass API")
+    static void ApplyAndCache(FEclassData NewData);
+
 private:
     static FEclassData CachedData;
-    static void ApplyAndCache(FEclassData NewData);
 };
