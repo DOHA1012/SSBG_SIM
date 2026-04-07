@@ -44,8 +44,8 @@ function applySchoolReward(userId, newAttendance, newAssignment) {
     academicCurrency: 0,
     extraCurrency:    deltaAttendance * (REWARD_CONFIG.attendance.extraCurrency || 0),
     idleCurrency:     0,
-    exp:              deltaAttendance * (REWARD_CONFIG.attendance.exp         || 0)
-                    + deltaAssignment * (REWARD_CONFIG.assignment.exp         || 0),
+    exp:              deltaAttendance * (REWARD_CONFIG.attendance.exp || 0)
+                    + deltaAssignment * (REWARD_CONFIG.assignment.exp || 0),
   };
 
   db.prepare(`
@@ -68,8 +68,10 @@ function applySchoolReward(userId, newAttendance, newAssignment) {
   `).run(userId, newAttendance, newAssignment);
 
   const updated = db.prepare("SELECT * FROM users WHERE userId = ?").get(userId);
-  console.log(`[DB] ${userId} 재화 갱신:`, updated);
-  return updated;
+
+  // 변동분 함께 반환
+  const hasChange = Object.values(delta).some(v => v > 0);
+  return { user: updated, delta, hasChange };
 }
 
 // 재화 차감 (범용)

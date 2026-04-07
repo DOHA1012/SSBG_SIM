@@ -16,6 +16,16 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS login_snapshots (
+    userId           TEXT PRIMARY KEY,
+    academicCurrency INTEGER DEFAULT 0,
+    extraCurrency    INTEGER DEFAULT 0,
+    idleCurrency     INTEGER DEFAULT 0,
+    exp              INTEGER DEFAULT 0
+  )
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS school_snapshots (
     userId          TEXT PRIMARY KEY,
     attendanceCount INTEGER DEFAULT 0,

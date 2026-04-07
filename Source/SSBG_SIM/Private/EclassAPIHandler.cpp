@@ -31,7 +31,7 @@ static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
 }
 
 // 1. Login - 접속 시 서버 DB에서 데이터 수신
-void UEclassAPIHandler::Login(FString UserId, FOnEclassDataReceived OnComplete)
+void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
     Request->SetURL(GAME_SERVER + TEXT("/login"));
@@ -44,12 +44,14 @@ void UEclassAPIHandler::Login(FString UserId, FOnEclassDataReceived OnComplete)
     Request->OnProcessRequestComplete().BindLambda(
         [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
+            FEclassData Data;
+            FEclassDelta Delta;
+
             if (!bSuccess || !Res.IsValid())
             {
-                UE_LOG(LogTemp, Error, TEXT("[Login] 요청 실패 - 로컬 데이터 사용"));
-                // 오프라인 폴백: 로컬 세이브 데이터 사용
+                UE_LOG(LogTemp, Error, TEXT("[Login] Request Failed - Using Local Data"));
                 UEclassAPIHandler::LoadEclassData();
-                OnComplete.ExecuteIfBound(UEclassAPIHandler::CachedData);
+                OnComplete.ExecuteIfBound(UEclassAPIHandler::CachedData, Delta);
                 return;
             }
 
@@ -59,14 +61,35 @@ void UEclassAPIHandler::Login(FString UserId, FOnEclassDataReceived OnComplete)
 
             if (FJsonSerializer::Deserialize(Reader, Root))
             {
+                // user 파싱
                 const TSharedPtr<FJsonObject>* UserObj;
                 if (Root->TryGetObjectField(TEXT("user"), UserObj))
                 {
-                    FEclassData Data = ParseUserJson(*UserObj);
+                    Data = ParseUserJson(*UserObj);
                     UEclassAPIHandler::ApplyAndCache(Data);
-                    OnComplete.ExecuteIfBound(Data);
                 }
+
+                // delta 파싱
+                const TSharedPtr<FJsonObject>* DeltaObj;
+                if (Root->TryGetObjectField(TEXT("delta"), DeltaObj))
+                {
+                    int32 AC = 0, EC = 0, IC = 0, E = 0;
+                    (*DeltaObj)->TryGetNumberField(TEXT("academicCurrency"), AC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("extraCurrency"), EC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("idleCurrency"), IC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("exp"), E);
+                    Delta.AcademicCurrency = AC;
+                    Delta.ExtraCurrency = EC;
+                    Delta.IdleCurrency = IC;
+                    Delta.Exp = E;
+                }
+
+                bool bHasChange = false;
+                Root->TryGetBoolField(TEXT("hasChange"), bHasChange);
+                Delta.bHasChange = bHasChange;
             }
+
+            OnComplete.ExecuteIfBound(Data, Delta);
         });
 
     Request->ProcessRequest();

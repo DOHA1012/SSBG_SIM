@@ -4,7 +4,7 @@
 #include "EclassAPIHandler.generated.h"
 
 USTRUCT(BlueprintType)
-struct FEclassData
+struct FEclassDelta
 {
     GENERATED_BODY()
 
@@ -12,8 +12,10 @@ struct FEclassData
     UPROPERTY(BlueprintReadWrite) int32 ExtraCurrency = 0;
     UPROPERTY(BlueprintReadWrite) int32 IdleCurrency = 0;
     UPROPERTY(BlueprintReadWrite) int32 Exp = 0;
+    UPROPERTY(BlueprintReadWrite) bool  bHasChange = false;
 };
 
+DECLARE_DYNAMIC_DELEGATE_TwoParams(FOnLoginComplete, FEclassData, Data, FEclassDelta, Delta);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
 
@@ -24,7 +26,7 @@ class SSBG_SIM_API UEclassAPIHandler : public UBlueprintFunctionLibrary
 public:
     // 접속 시 호출 - 게임서버 DB에서 유저 데이터 로드
     UFUNCTION(BlueprintCallable)
-    static void Login(FString UserId, FOnEclassDataReceived OnComplete);
+    static void Login(FString UserId, FOnLoginComplete OnComplete);
 
     // 재화 사용 요청
     UFUNCTION(BlueprintCallable)
