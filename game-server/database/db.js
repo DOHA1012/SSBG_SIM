@@ -34,4 +34,17 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS daily_play_log (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId                  TEXT NOT NULL,
+    date                    TEXT NOT NULL,
+    exp_gained              INTEGER DEFAULT 0,
+    academic_currency_gained INTEGER DEFAULT 0,
+    extra_currency_gained   INTEGER DEFAULT 0,
+    idle_currency_gained    INTEGER DEFAULT 0,
+    play_minutes            INTEGER DEFAULT 0
+  )
+`);
+
 module.exports = db;

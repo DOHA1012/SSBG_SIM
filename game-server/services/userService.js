@@ -1,6 +1,6 @@
 const db = require("../database/db");
 
-// 재화 지급 설정 (여기만 수정하면 됨)
+// 재화 지급 설정 
 const REWARD_CONFIG = {
   attendance: {
     extraCurrency: 100,
@@ -11,7 +11,7 @@ const REWARD_CONFIG = {
   }
 };
 
-// 유저 가져오기 (없으면 생성)
+// 유저 가져오기 
 function getOrCreateUser(userId) {
   let user = db.prepare(
     "SELECT * FROM users WHERE userId = ?"
@@ -29,7 +29,7 @@ function getOrCreateUser(userId) {
   return user;
 }
 
-// 학교 데이터 기반 재화 갱신 (증분 방식)
+// 학교 데이터 기반 재화 갱신 
 function applySchoolReward(userId, newAttendance, newAssignment) {
   getOrCreateUser(userId);
 
