@@ -95,15 +95,16 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
     Request->ProcessRequest();
 }
 
-// 2. SpendGold - 재화 사용 요청
-void UEclassAPIHandler::SpendGold(FString UserId, int32 Amount, FOnSpendGoldResult OnComplete)
+// 2. SpendCurrency - 재화 사용 요청
+void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(GAME_SERVER + TEXT("/spend-gold"));
+    Request->SetURL(GAME_SERVER + TEXT("/spend-currency"));  // 수정
     Request->SetVerb("POST");
     Request->SetHeader("Content-Type", "application/json");
     Request->SetContentAsString(
-        FString::Printf(TEXT("{\"userId\":\"%s\",\"amount\":%d}"), *UserId, Amount)
+        FString::Printf(TEXT("{\"userId\":\"%s\",\"currencyType\":\"%s\",\"amount\":%d}"),
+            *UserId, *CurrencyType, Amount)  // currencyType 추가
     );
 
     Request->OnProcessRequestComplete().BindLambda(
@@ -111,7 +112,7 @@ void UEclassAPIHandler::SpendGold(FString UserId, int32 Amount, FOnSpendGoldResu
         {
             if (!bSuccess || !Res.IsValid())
             {
-                UE_LOG(LogTemp, Error, TEXT("[SpendGold] 요청 실패"));
+                UE_LOG(LogTemp, Error, TEXT("[SpendCurrency] Request Failed"));  // 한글 제거
                 OnComplete.ExecuteIfBound(false);
                 return;
             }
@@ -127,7 +128,6 @@ void UEclassAPIHandler::SpendGold(FString UserId, int32 Amount, FOnSpendGoldResu
 
                 if (bSuccess2)
                 {
-                    // 서버에서 돌아온 최신 재화로 캐시 갱신
                     const TSharedPtr<FJsonObject>* UserObj;
                     if (Root->TryGetObjectField(TEXT("current"), UserObj))
                     {
@@ -189,4 +189,47 @@ void UEclassAPIHandler::LoadEclassData()
             CachedData.Exp = Load->Exp;
         }
     }
+}
+
+void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/daily-reset"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(
+        FString::Printf(TEXT("{\"userId\":\"%s\"}"), *UserId)
+    );
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[DailyReset] Request Failed"));
+                OnComplete.ExecuteIfBound(false);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bReady = false;
+                Root->TryGetBoolField(TEXT("readyForDreamShop"), bReady);
+
+                // 재화 갱신
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    UEclassAPIHandler::ApplyAndCache(ParseUserJson(*UserObj));
+                }
+
+                OnComplete.ExecuteIfBound(bReady);
+            }
+        });
+
+    Request->ProcessRequest();
 }

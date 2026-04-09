@@ -47,4 +47,12 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS daily_reset_log (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId  TEXT NOT NULL,
+    resetAt TEXT NOT NULL
+  )
+`);
+
 module.exports = db;
