@@ -233,3 +233,42 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
 
     Request->ProcessRequest();
 }
+
+void UEclassAPIHandler::SendCurrencyUpdate(int32 Amount, FString ChangeType)
+{
+    // JSON 데이터 바구니 생성
+    TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
+    JsonObj->SetStringField(TEXT("user_id"), TEXT("MyUser_01"));
+    JsonObj->SetNumberField(TEXT("amount"), Amount);
+    JsonObj->SetStringField(TEXT("type"), ChangeType);
+
+    // 바구니 내용을 텍스트로 변환 (직렬화)
+    FString JsonString;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+    FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
+
+    // HTTP 요청 만들기 및 설정
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(TEXT("http://localhost:3000/api/currency/update")); // Node.js 서버 주소
+    Request->SetVerb(TEXT("POST"));
+    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    Request->SetContentAsString(JsonString);
+
+    // 답장 오면 실행할 함수 연결: 람다 함수 활용
+    Request->OnProcessRequestComplete().BindLambda([](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (bSuccess && Res.IsValid())
+            {
+                UE_LOG(LogTemp, Log, TEXT("서버 응답 성공: %s"), *Res->GetContentAsString());
+                // 주의: 라이브러리는 화면이 없어서 여기서 바로 UI를 갱신하기는 어렵습니다.
+                // 보통은 로그를 찍거나 전역 매니저에 데이터를 넘깁니다.
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("서버 통신 실패"));
+            }
+        });
+
+    // 발송
+    Request->ProcessRequest();
+}
