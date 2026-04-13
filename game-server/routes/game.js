@@ -1,6 +1,6 @@
 const express = require("express");
+const axios = require("axios");
 const router = express.Router();
-const { getOrCreateUser, applySchoolReward, spendCurrency } = require("../services/userService");
 const db = require("../database/db");
 
 // 1. 학교서버 → 게임서버 웹훅
@@ -165,38 +165,46 @@ router.post("/daily-summary", (req, res) => {
 });
 
 // 6. 정산 완료 처리 (클라이언트 daily reset 감지 시 호출)
-router.post("/daily-reset", (req, res) => {
+router.post("/daily-reset", async (req, res) => {
   const { userId } = req.body;
-
-  if (!userId) {
-    return res.status(400).json({ error: "userId required" });
-  }
+  if (!userId) return res.status(400).json({ error: "userId required" });
 
   try {
-    // 학교 데이터 재동기화
-    const snapshot = db.prepare(
-      "SELECT * FROM school_snapshots WHERE userId = ?"
-    ).get(userId) || { attendanceCount: 0, assignmentCount: 0 };
+    // 오늘 이미 리셋했는지 확인
+    const alreadyReset = db.prepare(`
+      SELECT * FROM daily_reset_log
+      WHERE userId = ? AND date(resetAt) = date('now')
+    `).get(userId);
 
-    const schoolResult = applySchoolReward(
-      userId,
-      snapshot.attendanceCount,
-      snapshot.assignmentCount
-    );
+    if (alreadyReset) {
+      const user = getOrCreateUser(userId);
+      return res.json({ 
+        success: false, 
+        message: "Already reset today",
+        user: user
+      });
+    }
 
-    // 정산 완료 시각 기록
-    db.prepare(`
-      INSERT INTO daily_reset_log (userId, resetAt)
-      VALUES (?, datetime('now'))
-    `).run(userId);
+    // 학교서버에서 최신 데이터 가져오기
+    const axios = require("axios");
+    const attendanceRes = await axios.get(`http://localhost:4000/attendance?userId=${userId}`);
+    const assignmentRes = await axios.get(`http://localhost:4000/assignment?userId=${userId}`);
+
+    const attendanceCount = attendanceRes.data.attendance.filter(a => a.status === "출석").length;
+    const assignmentCount = assignmentRes.data.assignment.filter(a => a.status === "제출").length;
+
+    const result = applySchoolReward(userId, attendanceCount, assignmentCount);
+
+    // 리셋 기록 저장
+    db.prepare(
+      "INSERT INTO daily_reset_log (userId, resetAt) VALUES (?, datetime('now'))"
+    ).run(userId);
 
     res.json({
       success: true,
-      user: schoolResult.user,
-      delta: schoolResult.delta,
-      hasChange: schoolResult.hasChange,
-      resetAt: new Date().toISOString(),
-      // 꿈 상점 담당자가 필요한 데이터 여기 추가 가능
+      user: result.user,
+      delta: result.delta,
+      hasChange: result.hasChange,
       readyForDreamShop: true
     });
 
@@ -206,4 +214,67 @@ router.post("/daily-reset", (req, res) => {
   }
 });
 
+
+const { getOrCreateUser, applySchoolReward, spendCurrency, purchaseItem, getUserItems, getSpendLog } = require("../services/userService");
+
+// 아이템 구매
+router.post("/purchase", (req, res) => {
+  const { userId, itemId } = req.body;
+  if (!userId || !itemId) {
+    return res.status(400).json({ error: "userId, itemId required" });
+  }
+
+  try {
+    const result = purchaseItem(userId, itemId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 보유 아이템 조회
+router.get("/items/:userId", (req, res) => {
+  try {
+    const items = getUserItems(req.params.userId);
+    res.json({ success: true, items });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 소모 이력 조회
+router.get("/spend-log/:userId", (req, res) => {
+  try {
+    const log = getSpendLog(req.params.userId);
+    res.json({ success: true, log });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 아이템 등록 (관리자용 - 개발 중 테스트용)
+router.post("/admin/item", (req, res) => {
+  const { itemId, name, currencyType, price, description } = req.body;
+  const validTypes = ["academicCurrency", "extraCurrency", "idleCurrency", "exp"];
+
+  if (!itemId || !name || !validTypes.includes(currencyType) || price == null) {
+    return res.status(400).json({ error: "itemId, name, currencyType, price required" });
+  }
+
+  try {
+    db.prepare(`
+      INSERT INTO items (itemId, name, currencyType, price, description)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(itemId) DO UPDATE SET
+        name         = excluded.name,
+        currencyType = excluded.currencyType,
+        price        = excluded.price,
+        description  = excluded.description
+    `).run(itemId, name, currencyType, price, description || "");
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = router;

@@ -101,4 +101,80 @@ function spendCurrency(userId, currencyType, amount) {
   };
 }
 
+//아이템 구매
+function purchaseItem(userId, itemId) {
+  const user = getOrCreateUser(userId);
+
+  // 아이템 정보 조회
+  const item = db.prepare(
+    "SELECT * FROM items WHERE itemId = ?"
+  ).get(itemId);
+
+  if (!item) {
+    return { success: false, message: "Item not found" };
+  }
+
+  // 잔액 확인
+  if (user[item.currencyType] < item.price) {
+    return { success: false, message: "Not enough currency", current: user };
+  }
+
+  // 재화 차감
+  db.prepare(`
+    UPDATE users
+    SET ${item.currencyType} = ${item.currencyType} - ?,
+        updatedAt = datetime('now')
+    WHERE userId = ?
+  `).run(item.price, userId);
+
+  // 아이템 지급
+  db.prepare(`
+    INSERT INTO user_items (userId, itemId, quantity)
+    VALUES (?, ?, 1)
+    ON CONFLICT DO NOTHING
+  `).run(userId, itemId);
+
+  // 소모 이력 기록
+  db.prepare(`
+    INSERT INTO spend_log (userId, currencyType, amount, reason)
+    VALUES (?, ?, ?, ?)
+  `).run(userId, item.currencyType, item.price, `purchase:${itemId}`);
+
+  return {
+    success: true,
+    item,
+    current: db.prepare("SELECT * FROM users WHERE userId = ?").get(userId)
+  };
+}
+
+// 유저 보유 아이템 조회
+function getUserItems(userId) {
+  return db.prepare(`
+    SELECT ui.*, i.name, i.description
+    FROM user_items ui
+    JOIN items i ON ui.itemId = i.itemId
+    WHERE ui.userId = ?
+    ORDER BY ui.obtainedAt DESC
+  `).all(userId);
+}
+
+// 소모 이력 조회
+function getSpendLog(userId) {
+  return db.prepare(`
+    SELECT * FROM spend_log
+    WHERE userId = ?
+    ORDER BY spentAt DESC
+    LIMIT 50
+  `).all(userId);
+}
+
+module.exports = { 
+  getOrCreateUser, 
+  applySchoolReward, 
+  spendCurrency,
+  purchaseItem,
+  getUserItems,
+  getSpendLog
+};
+
 module.exports = { getOrCreateUser, applySchoolReward, spendCurrency };
