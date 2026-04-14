@@ -27,11 +27,23 @@ struct FEclassDelta
     UPROPERTY(BlueprintReadWrite) bool  bHasChange = false;
 };
 
+USTRUCT(BlueprintType)
+struct FServerTime
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) int32 UtcHour = 0;
+    UPROPERTY(BlueprintReadWrite) int32 UtcDay = 0;
+    UPROPERTY(BlueprintReadWrite) int32 UtcMonth = 0;
+    UPROPERTY(BlueprintReadWrite) int32 UtcYear = 0;
+    UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
+};
+
 // 3. 델리게이트
 DECLARE_DYNAMIC_DELEGATE_TwoParams(FOnLoginComplete, FEclassData, Data, FEclassDelta, Delta);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete, bool, bReadyForDreamShop);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived, FServerTime, ServerTime);
 
 // 4. 클래스
 UCLASS()
@@ -60,6 +72,9 @@ public:
     // 클라이언트에서 서버로 재화 증감량 정보 보내기
     UFUNCTION(BlueprintCallable, Category = "API")
     static void SendCurrencyUpdate(int32 Amount, FString ChangeType);
+    
+    UFUNCTION(BlueprintCallable)
+    static void GetServerTime(FOnServerTimeReceived OnComplete);
 
 private:
     static FEclassData CachedData;

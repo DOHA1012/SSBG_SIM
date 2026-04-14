@@ -272,3 +272,48 @@ void UEclassAPIHandler::SendCurrencyUpdate(int32 Amount, FString ChangeType)
     // 발송
     Request->ProcessRequest();
 }
+
+void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/server-time"));
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            FServerTime ServerTime;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetServerTime] Request Failed"));
+                OnComplete.ExecuteIfBound(ServerTime);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                int32 Hour = 0, Day = 0, Month = 0, Year = 0, Seconds = 0;
+                Root->TryGetNumberField(TEXT("utcHour"), Hour);
+                Root->TryGetNumberField(TEXT("utcDay"), Day);
+                Root->TryGetNumberField(TEXT("utcMonth"), Month);
+                Root->TryGetNumberField(TEXT("utcYear"), Year);
+                Root->TryGetNumberField(TEXT("secondsUntilReset"), Seconds);
+
+                ServerTime.UtcHour = Hour;
+                ServerTime.UtcDay = Day;
+                ServerTime.UtcMonth = Month;
+                ServerTime.UtcYear = Year;
+                ServerTime.SecondsUntilReset = Seconds;
+            }
+
+            OnComplete.ExecuteIfBound(ServerTime);
+        });
+
+    Request->ProcessRequest();
+}
