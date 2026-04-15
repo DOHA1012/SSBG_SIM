@@ -249,7 +249,7 @@ void UEclassAPIHandler::SendCurrencyUpdate(int32 Amount, FString ChangeType)
 
     // HTTP 요청 만들기 및 설정
     TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(TEXT("http://134.185.100.53:3000/api/currency/update")); // Node.js 서버 주소
+    Request->SetURL(GAME_SERVER + TEXT("/currency/update")); // oracle 서버 주소
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetContentAsString(JsonString);
@@ -259,9 +259,24 @@ void UEclassAPIHandler::SendCurrencyUpdate(int32 Amount, FString ChangeType)
         {
             if (bSuccess && Res.IsValid())
             {
-                UE_LOG(LogTemp, Log, TEXT("서버 응답 성공: %s"), *Res->GetContentAsString());
-                // 주의: 라이브러리는 화면이 없어서 여기서 바로 UI를 갱신하기는 어렵습니다.
-                // 보통은 로그를 찍거나 전역 매니저에 데이터를 넘깁니다.
+                // 서버의 응답 해석
+                TSharedPtr<FJsonObject> RootObj;
+                TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+                if (FJsonSerializer::Deserialize(Reader, RootObj))
+                {
+                    // 구조체 생성 및 데이터 보내기
+                    FEclassData NewSyncedData;
+                    NewSyncedData.AcademicCurrency = RootObj->GetIntegerField(TEXT("academic_currency"));
+                    NewSyncedData.ExtraCurrency = RootObj->GetIntegerField(TEXT("extra_currency"));
+                    NewSyncedData.IdleCurrency = RootObj->GetIntegerField(TEXT("idle_currency"));
+                    NewSyncedData.Exp = RootObj->GetIntegerField(TEXT("exp"));
+
+                    // ApplyAndCache 호출
+                    ApplyAndCache(NewSyncedData);
+                    
+                    UE_LOG(LogTemp, Log, TEXT("서버와 데이터 동기화 완료!"));
+                }
             }
             else
             {
