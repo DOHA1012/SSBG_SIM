@@ -9,7 +9,7 @@
 
 FEclassData UEclassAPIHandler::CachedData;
 
-static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
+static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
 
 // 공통: JSON 파싱 헬퍼
 static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
@@ -249,7 +249,7 @@ void UEclassAPIHandler::SendCurrencyUpdate(int32 Amount, FString ChangeType)
 
     // HTTP 요청 만들기 및 설정
     TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(TEXT("http://localhost:3000/api/currency/update")); // Node.js 서버 주소
+    Request->SetURL(TEXT("http://134.185.100.53:3000/api/currency/update")); // Node.js 서버 주소
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetContentAsString(JsonString);
