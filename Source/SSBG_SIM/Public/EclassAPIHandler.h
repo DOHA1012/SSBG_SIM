@@ -44,6 +44,7 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete, bool, bReadyForDreamShop);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived, FServerTime, ServerTime);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnGainCurrencyComplete, bool, bSuccess);
 
 // 4. 클래스
 UCLASS()
@@ -71,7 +72,7 @@ public:
 
     // 클라이언트에서 서버로 재화 증감량 정보 보내기
     UFUNCTION(BlueprintCallable, Category = "API")
-    static void SendCurrencyUpdate(int32 Amount, FString ChangeType);
+    static void GainCurrency(FString UserId, int32 Amount, FString CurrencyType);
     
     UFUNCTION(BlueprintCallable)
     static void GetServerTime(FOnServerTimeReceived OnComplete);

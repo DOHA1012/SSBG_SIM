@@ -42,7 +42,7 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
     );
 
     Request->OnProcessRequestComplete().BindLambda(
-        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
             FEclassData Data;
             FEclassDelta Delta;
@@ -87,6 +87,24 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
                 bool bHasChange = false;
                 Root->TryGetBoolField(TEXT("hasChange"), bHasChange);
                 Delta.bHasChange = bHasChange;
+
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    Data = ParseUserJson(*UserObj);
+                    UEclassAPIHandler::ApplyAndCache(Data);
+
+                    // [수정된 성공 로그] 유저 ID와 함께 현재 보유 중인 모든 재화/경험치를 출력합니다.
+                    UE_LOG(LogTemp, Log, TEXT("[Login] Successfully Synced. User: %s | AC: %d, EC: %d, IC: %d, EXP: %d"),
+                        *UserId,
+                        Data.AcademicCurrency,
+                        Data.ExtraCurrency,
+                        Data.IdleCurrency,
+                        Data.Exp);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[Login] Server responded but 'user' field is missing!"));
+                }
             }
 
             OnComplete.ExecuteIfBound(Data, Delta);
@@ -234,57 +252,49 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
     Request->ProcessRequest();
 }
 
-void UEclassAPIHandler::SendCurrencyUpdate(int32 Amount, FString ChangeType)
+void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString CurrencyType)
 {
-    // JSON 데이터 바구니 생성
+    // JSON 데이터 생성 
     TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
-    JsonObj->SetStringField(TEXT("user_id"), TEXT("MyUser_01"));
+    JsonObj->SetStringField(TEXT("userId"), UserId);
     JsonObj->SetNumberField(TEXT("amount"), Amount);
-    JsonObj->SetStringField(TEXT("type"), ChangeType);
+    JsonObj->SetStringField(TEXT("currencyType"), CurrencyType);
 
-    // 바구니 내용을 텍스트로 변환 (직렬화)
     FString JsonString;
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
     FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
 
-    // HTTP 요청 만들기 및 설정
+    // HTTP 요청
     TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(GAME_SERVER + TEXT("/currency/update")); // oracle 서버 주소
+    Request->SetURL(GAME_SERVER + TEXT("/currency/gain")); // 주소
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetContentAsString(JsonString);
 
-    // 답장 오면 실행할 함수 연결: 람다 함수 활용
-    Request->OnProcessRequestComplete().BindLambda([](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
+    // 응답 처리
+    Request->OnProcessRequestComplete().BindLambda([UserId](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
         {
             if (bSuccess && Res.IsValid())
             {
-                // 서버의 응답 해석
                 TSharedPtr<FJsonObject> RootObj;
                 TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
 
                 if (FJsonSerializer::Deserialize(Reader, RootObj))
                 {
-                    // 구조체 생성 및 데이터 보내기
-                    FEclassData NewSyncedData;
-                    NewSyncedData.AcademicCurrency = RootObj->GetIntegerField(TEXT("academic_currency"));
-                    NewSyncedData.ExtraCurrency = RootObj->GetIntegerField(TEXT("extra_currency"));
-                    NewSyncedData.IdleCurrency = RootObj->GetIntegerField(TEXT("idle_currency"));
-                    NewSyncedData.Exp = RootObj->GetIntegerField(TEXT("exp"));
+                    FEclassData NewSyncedData = ParseUserJson(RootObj->GetObjectField(TEXT("current")).ToSharedRef());
 
-                    // ApplyAndCache 호출
+                    // 로컬 캐시 갱신
                     ApplyAndCache(NewSyncedData);
-                    
-                    UE_LOG(LogTemp, Log, TEXT("서버와 데이터 동기화 완료!"));
+
+                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s님 재화 획득 성공! AC:%d"), *UserId, NewSyncedData.AcademicCurrency);
                 }
             }
             else
             {
-                UE_LOG(LogTemp, Error, TEXT("서버 통신 실패"));
+                UE_LOG(LogTemp, Error, TEXT("[GainCurrency] 서버 통신 실패"));
             }
         });
 
-    // 발송
     Request->ProcessRequest();
 }
 
