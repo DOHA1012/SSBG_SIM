@@ -9,7 +9,7 @@
 
 FEclassData UEclassAPIHandler::CachedData;
 
-static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
+static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
 
 // 공통: JSON 파싱 헬퍼
 static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
@@ -61,12 +61,22 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 
             if (FJsonSerializer::Deserialize(Reader, Root))
             {
-                // user 파싱
                 const TSharedPtr<FJsonObject>* UserObj;
                 if (Root->TryGetObjectField(TEXT("user"), UserObj))
                 {
                     Data = ParseUserJson(*UserObj);
                     UEclassAPIHandler::ApplyAndCache(Data);
+
+                    UE_LOG(LogTemp, Log, TEXT("[Login] Successfully Synced. User: %s | AC: %d, EC: %d, IC: %d, EXP: %d"),
+                        *UserId,
+                        Data.AcademicCurrency,
+                        Data.ExtraCurrency,
+                        Data.IdleCurrency,
+                        Data.Exp);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[Login] Server responded but 'user' field is missing!"));
                 }
 
                 // delta 파싱
@@ -87,24 +97,6 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
                 bool bHasChange = false;
                 Root->TryGetBoolField(TEXT("hasChange"), bHasChange);
                 Delta.bHasChange = bHasChange;
-
-                if (Root->TryGetObjectField(TEXT("user"), UserObj))
-                {
-                    Data = ParseUserJson(*UserObj);
-                    UEclassAPIHandler::ApplyAndCache(Data);
-
-                    // [수정된 성공 로그] 유저 ID와 함께 현재 보유 중인 모든 재화/경험치를 출력합니다.
-                    UE_LOG(LogTemp, Log, TEXT("[Login] Successfully Synced. User: %s | AC: %d, EC: %d, IC: %d, EXP: %d"),
-                        *UserId,
-                        Data.AcademicCurrency,
-                        Data.ExtraCurrency,
-                        Data.IdleCurrency,
-                        Data.Exp);
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("[Login] Server responded but 'user' field is missing!"));
-                }
             }
 
             OnComplete.ExecuteIfBound(Data, Delta);
@@ -117,12 +109,12 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(GAME_SERVER + TEXT("/spend-currency"));  // 수정
+    Request->SetURL(GAME_SERVER + TEXT("/spend-currency"));
     Request->SetVerb("POST");
     Request->SetHeader("Content-Type", "application/json");
     Request->SetContentAsString(
         FString::Printf(TEXT("{\"userId\":\"%s\",\"currencyType\":\"%s\",\"amount\":%d}"),
-            *UserId, *CurrencyType, Amount)  // currencyType 추가
+            *UserId, *CurrencyType, Amount)
     );
 
     Request->OnProcessRequestComplete().BindLambda(
@@ -130,7 +122,7 @@ void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int3
         {
             if (!bSuccess || !Res.IsValid())
             {
-                UE_LOG(LogTemp, Error, TEXT("[SpendCurrency] Request Failed"));  // 한글 제거
+                UE_LOG(LogTemp, Error, TEXT("[SpendCurrency] Request Failed"));
                 OnComplete.ExecuteIfBound(false);
                 return;
             }
@@ -170,15 +162,15 @@ FEclassData UEclassAPIHandler::GetEclassData()
 void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
 {
     CachedData = NewData;
-    SaveEclassData(); // 서버 응답 받을 때마다 로컬에도 저장
+    SaveEclassData();
 
-    // 로그 출력 부분도 3종 재화에 맞게 수정합니다.
     UE_LOG(LogTemp, Warning, TEXT("[Cache] Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
         CachedData.AcademicCurrency,
         CachedData.ExtraCurrency,
         CachedData.IdleCurrency,
         CachedData.Exp);
 }
+
 void UEclassAPIHandler::SaveEclassData()
 {
     UEclassSaveGame* Save = Cast<UEclassSaveGame>(
@@ -238,7 +230,6 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
                 bool bReady = false;
                 Root->TryGetBoolField(TEXT("readyForDreamShop"), bReady);
 
-                // 재화 갱신
                 const TSharedPtr<FJsonObject>* UserObj;
                 if (Root->TryGetObjectField(TEXT("user"), UserObj))
                 {
@@ -254,7 +245,6 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
 
 void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString CurrencyType)
 {
-    // JSON 데이터 생성 
     TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
     JsonObj->SetStringField(TEXT("userId"), UserId);
     JsonObj->SetNumberField(TEXT("amount"), Amount);
@@ -264,14 +254,12 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
     TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
     FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
 
-    // HTTP 요청
     TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(GAME_SERVER + TEXT("/currency/gain")); // 주소
+    Request->SetURL(GAME_SERVER + TEXT("/currency/gain"));
     Request->SetVerb(TEXT("POST"));
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetContentAsString(JsonString);
 
-    // 응답 처리
     Request->OnProcessRequestComplete().BindLambda([UserId](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
         {
             if (bSuccess && Res.IsValid())
@@ -282,16 +270,15 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
                 if (FJsonSerializer::Deserialize(Reader, RootObj))
                 {
                     FEclassData NewSyncedData = ParseUserJson(RootObj->GetObjectField(TEXT("current")).ToSharedRef());
-
-                    // 로컬 캐시 갱신
                     ApplyAndCache(NewSyncedData);
 
-                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s님 재화 획득 성공! AC:%d"), *UserId, NewSyncedData.AcademicCurrency);
+                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s Currency gained. AC:%d"),
+                        *UserId, NewSyncedData.AcademicCurrency);
                 }
             }
             else
             {
-                UE_LOG(LogTemp, Error, TEXT("[GainCurrency] 서버 통신 실패"));
+                UE_LOG(LogTemp, Error, TEXT("[GainCurrency] Request Failed"));
             }
         });
 
