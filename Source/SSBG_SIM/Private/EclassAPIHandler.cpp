@@ -9,6 +9,9 @@
 
 FEclassData UEclassAPIHandler::CachedData;
 
+// 오라클 서버 주소
+// static const Fstring GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
+// 로컬 서버 주소
 static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
 
 // 공통: JSON 파싱 헬퍼
