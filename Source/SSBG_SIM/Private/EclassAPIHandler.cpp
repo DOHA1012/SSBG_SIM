@@ -9,12 +9,15 @@
 
 FEclassData UEclassAPIHandler::CachedData;
 
+<<<<<<< HEAD
+static const FString GAME_SERVER = TEXT("http://localhost:3000/api");
+=======
 // 오라클 서버 주소
-// static const Fstring GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
+static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
 // 로컬 서버 주소
-static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
+//static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
+>>>>>>> 5f3b77f16368d6f5cf6fa920c803e2457353785c
 
-// 공통: JSON 파싱 헬퍼
 static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
 {
     FEclassData Result;
@@ -33,7 +36,7 @@ static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
     return Result;
 }
 
-// 1. Login - 접속 시 서버 DB에서 데이터 수신
+// 1. Login
 void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -47,14 +50,14 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
     Request->OnProcessRequestComplete().BindLambda(
         [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
-            FEclassData Data;
-            FEclassDelta Delta;
+            FLoginResult LoginResult;
 
             if (!bSuccess || !Res.IsValid())
             {
                 UE_LOG(LogTemp, Error, TEXT("[Login] Request Failed - Using Local Data"));
                 UEclassAPIHandler::LoadEclassData();
-                OnComplete.ExecuteIfBound(UEclassAPIHandler::CachedData, Delta);
+                LoginResult.Data = UEclassAPIHandler::CachedData;
+                OnComplete.ExecuteIfBound(LoginResult);
                 return;
             }
 
@@ -64,22 +67,23 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 
             if (FJsonSerializer::Deserialize(Reader, Root))
             {
+                // user 파싱
                 const TSharedPtr<FJsonObject>* UserObj;
                 if (Root->TryGetObjectField(TEXT("user"), UserObj))
                 {
-                    Data = ParseUserJson(*UserObj);
-                    UEclassAPIHandler::ApplyAndCache(Data);
+                    LoginResult.Data = ParseUserJson(*UserObj);
+                    UEclassAPIHandler::ApplyAndCache(LoginResult.Data);
 
-                    UE_LOG(LogTemp, Log, TEXT("[Login] Successfully Synced. User: %s | AC: %d, EC: %d, IC: %d, EXP: %d"),
+                    UE_LOG(LogTemp, Log, TEXT("[Login] Synced. User: %s | AC: %d, EC: %d, IC: %d, EXP: %d"),
                         *UserId,
-                        Data.AcademicCurrency,
-                        Data.ExtraCurrency,
-                        Data.IdleCurrency,
-                        Data.Exp);
+                        LoginResult.Data.AcademicCurrency,
+                        LoginResult.Data.ExtraCurrency,
+                        LoginResult.Data.IdleCurrency,
+                        LoginResult.Data.Exp);
                 }
                 else
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[Login] Server responded but 'user' field is missing!"));
+                    UE_LOG(LogTemp, Warning, TEXT("[Login] 'user' field missing!"));
                 }
 
                 // delta 파싱
@@ -91,24 +95,35 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
                     (*DeltaObj)->TryGetNumberField(TEXT("extraCurrency"), EC);
                     (*DeltaObj)->TryGetNumberField(TEXT("idleCurrency"), IC);
                     (*DeltaObj)->TryGetNumberField(TEXT("exp"), E);
-                    Delta.AcademicCurrency = AC;
-                    Delta.ExtraCurrency = EC;
-                    Delta.IdleCurrency = IC;
-                    Delta.Exp = E;
+                    LoginResult.Delta.AcademicCurrency = AC;
+                    LoginResult.Delta.ExtraCurrency = EC;
+                    LoginResult.Delta.IdleCurrency = IC;
+                    LoginResult.Delta.Exp = E;
                 }
 
                 bool bHasChange = false;
                 Root->TryGetBoolField(TEXT("hasChange"), bHasChange);
-                Delta.bHasChange = bHasChange;
+                LoginResult.Delta.bHasChange = bHasChange;
+
+                // ✅ 시간 정보 파싱 (표시 전용)
+                bool bResetDone = false;
+                int32 Seconds = 0;
+                Root->TryGetBoolField(TEXT("resetDoneToday"), bResetDone);
+                Root->TryGetNumberField(TEXT("secondsUntilReset"), Seconds);
+                LoginResult.bResetDoneToday = bResetDone;
+                LoginResult.SecondsUntilReset = Seconds;
+
+                UE_LOG(LogTemp, Log, TEXT("[Login] ResetDone: %s | SecondsUntilReset: %d"),
+                    bResetDone ? TEXT("true") : TEXT("false"), Seconds);
             }
 
-            OnComplete.ExecuteIfBound(Data, Delta);
+            OnComplete.ExecuteIfBound(LoginResult);
         });
 
     Request->ProcessRequest();
 }
 
-// 2. SpendCurrency - 재화 사용 요청
+// 2. SpendCurrency
 void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -204,6 +219,7 @@ void UEclassAPIHandler::LoadEclassData()
     }
 }
 
+// 4. RequestDailyReset (수동 호출용 - 보통은 cron이 처리)
 void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -246,6 +262,7 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
     Request->ProcessRequest();
 }
 
+// 5. GainCurrency
 void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString CurrencyType)
 {
     TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
@@ -263,7 +280,7 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetContentAsString(JsonString);
 
-    Request->OnProcessRequestComplete().BindLambda([UserId](FHttpRequestPtr Req, FHttpResponsePtr Res, bool bSuccess)
+    Request->OnProcessRequestComplete().BindLambda([UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
             if (bSuccess && Res.IsValid())
             {
@@ -274,9 +291,7 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
                 {
                     FEclassData NewSyncedData = ParseUserJson(RootObj->GetObjectField(TEXT("current")).ToSharedRef());
                     ApplyAndCache(NewSyncedData);
-
-                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s Currency gained. AC:%d"),
-                        *UserId, NewSyncedData.AcademicCurrency);
+                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s - AC:%d"), *UserId, NewSyncedData.AcademicCurrency);
                 }
             }
             else
@@ -288,6 +303,7 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
     Request->ProcessRequest();
 }
 
+// 6. GetServerTime (표시 전용)
 void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
