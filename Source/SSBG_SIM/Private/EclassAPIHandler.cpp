@@ -9,9 +9,6 @@
 
 FEclassData UEclassAPIHandler::CachedData;
 
-
-
-static const FString GAME_SERVER = TEXT("http://localhost:3000/api");
 // 오라클 서버 주소
 static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
 // 로컬 서버 주소
