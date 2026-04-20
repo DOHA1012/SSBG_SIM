@@ -9,14 +9,14 @@
 
 FEclassData UEclassAPIHandler::CachedData;
 
-<<<<<<< HEAD
+
+
 static const FString GAME_SERVER = TEXT("http://localhost:3000/api");
-=======
 // 오라클 서버 주소
 static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
 // 로컬 서버 주소
 //static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
->>>>>>> 5f3b77f16368d6f5cf6fa920c803e2457353785c
+
 
 static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
 {
