@@ -3,17 +3,18 @@
 #include "Interfaces/IHttpResponse.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
 #include "Kismet/GameplayStatics.h"
 #include "EclassSaveGame.h"
 
 FEclassData UEclassAPIHandler::CachedData;
 
-// 오라클 서버 주소
+//오라클 서버 주소
 static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
+
 // 로컬 서버 주소
 //static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
-
 
 static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
 {
@@ -64,7 +65,6 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 
             if (FJsonSerializer::Deserialize(Reader, Root))
             {
-                // user 파싱
                 const TSharedPtr<FJsonObject>* UserObj;
                 if (Root->TryGetObjectField(TEXT("user"), UserObj))
                 {
@@ -83,7 +83,6 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
                     UE_LOG(LogTemp, Warning, TEXT("[Login] 'user' field missing!"));
                 }
 
-                // delta 파싱
                 const TSharedPtr<FJsonObject>* DeltaObj;
                 if (Root->TryGetObjectField(TEXT("delta"), DeltaObj))
                 {
@@ -102,7 +101,6 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
                 Root->TryGetBoolField(TEXT("hasChange"), bHasChange);
                 LoginResult.Delta.bHasChange = bHasChange;
 
-                // ✅ 시간 정보 파싱 (표시 전용)
                 bool bResetDone = false;
                 int32 Seconds = 0;
                 Root->TryGetBoolField(TEXT("resetDoneToday"), bResetDone);
@@ -216,7 +214,7 @@ void UEclassAPIHandler::LoadEclassData()
     }
 }
 
-// 4. RequestDailyReset (수동 호출용 - 보통은 cron이 처리)
+// 4. RequestDailyReset
 void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -300,7 +298,7 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
     Request->ProcessRequest();
 }
 
-// 6. GetServerTime (표시 전용)
+// 6. GetServerTime
 void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -341,6 +339,65 @@ void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
             }
 
             OnComplete.ExecuteIfBound(ServerTime);
+        });
+
+    Request->ProcessRequest();
+}
+
+// 7. GetAcademicLog - 학사 변동 로그 조회
+void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/academic-log/") + UserId);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            TArray<FAcademicLogEntry> Logs;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetAcademicLog] Request Failed"));
+                OnComplete.ExecuteIfBound(Logs);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TArray<TSharedPtr<FJsonValue>>* LogArray;
+                if (Root->TryGetArrayField(TEXT("logs"), LogArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& Val : *LogArray)
+                    {
+                        const TSharedPtr<FJsonObject>& Obj = Val->AsObject();
+                        if (!Obj.IsValid()) continue;
+
+                        FAcademicLogEntry Entry;
+                        int32 Id = 0, DeltaExtra = 0, DeltaExp = 0;
+                        Obj->TryGetNumberField(TEXT("id"), Id);
+                        Obj->TryGetNumberField(TEXT("deltaExtra"), DeltaExtra);
+                        Obj->TryGetNumberField(TEXT("deltaExp"), DeltaExp);
+
+                        Entry.Id = Id;
+                        Entry.DeltaExtra = DeltaExtra;
+                        Entry.DeltaExp = DeltaExp;
+                        Obj->TryGetStringField(TEXT("changeType"), Entry.ChangeType);
+                        Obj->TryGetStringField(TEXT("detail"), Entry.Detail);
+                        Obj->TryGetStringField(TEXT("createdAt"), Entry.CreatedAt);
+
+                        Logs.Add(Entry);
+                    }
+                }
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("[GetAcademicLog] %d logs received"), Logs.Num());
+            OnComplete.ExecuteIfBound(Logs);
         });
 
     Request->ProcessRequest();

@@ -25,15 +25,14 @@ struct FEclassDelta
     UPROPERTY(BlueprintReadWrite) bool  bHasChange = false;
 };
 
-//  로그인 응답 전체를 담는 구조체
 USTRUCT(BlueprintType)
 struct FLoginResult
 {
     GENERATED_BODY()
     UPROPERTY(BlueprintReadWrite) FEclassData Data;
     UPROPERTY(BlueprintReadWrite) FEclassDelta Delta;
-    UPROPERTY(BlueprintReadWrite) bool  bResetDoneToday = false;      // 오늘 정산 완료 여부
-    UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;        // 다음 리셋까지 남은 초
+    UPROPERTY(BlueprintReadWrite) bool  bResetDoneToday = false;
+    UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -47,13 +46,27 @@ struct FServerTime
     UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
 };
 
-// 델리게이트: FLoginResult 하나로 통합
+// 학사 변동 로그 1개
+USTRUCT(BlueprintType)
+struct FAcademicLogEntry
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) int32   Id = 0;
+    UPROPERTY(BlueprintReadWrite) FString ChangeType;   // "attendance" | "assignment"
+    UPROPERTY(BlueprintReadWrite) FString Detail;       // "출석 1회 → Extra +100 / EXP +30 획득!"
+    UPROPERTY(BlueprintReadWrite) int32   DeltaExtra = 0;
+    UPROPERTY(BlueprintReadWrite) int32   DeltaExp = 0;
+    UPROPERTY(BlueprintReadWrite) FString CreatedAt;
+};
+
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnLoginComplete, FLoginResult, Result);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete, bool, bReadyForDreamShop);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived, FServerTime, ServerTime);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnGainCurrencyComplete, bool, bSuccess);
+// 로그 조회 델리게이트
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived, const TArray<FAcademicLogEntry>&, Logs);
 
 UCLASS()
 class SSBG_SIM_API UEclassAPIHandler : public UBlueprintFunctionLibrary
@@ -84,9 +97,11 @@ public:
     UFUNCTION(BlueprintCallable)
     static void GetServerTime(FOnServerTimeReceived OnComplete);
 
+    // 학사 변동 로그 조회
+    UFUNCTION(BlueprintCallable)
+    static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
+
 private:
     static FEclassData CachedData;
     static void ApplyAndCache(FEclassData NewData);
-    // 서버가 정보 받으면 자동으로 호출되는 콜백함수(현 코드에서 필요없어 주석처리함)
-//void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);
 };
