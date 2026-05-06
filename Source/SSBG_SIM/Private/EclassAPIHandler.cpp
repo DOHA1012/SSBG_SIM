@@ -167,9 +167,44 @@ void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int3
 }
 
 // 3. 캐시 반환 / 저장 / 불러오기
-FEclassData UEclassAPIHandler::GetEclassData()
+void UEclassAPIHandler::GetEclassData(FString UserId, FOnLoginComplete OnComplete)
 {
-    return CachedData;
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    // 로그인 API가 아닌, 데이터 조회 전용 API(/user/아이디)를 호출합니다.
+    Request->SetURL(GAME_SERVER + TEXT("/user/") + UserId);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            FLoginResult Result;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetEclassData] Request Failed"));
+                OnComplete.ExecuteIfBound(Result);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    Result.Data = ParseUserJson(*UserObj);
+                    UEclassAPIHandler::ApplyAndCache(Result.Data);
+                }
+            }
+
+            OnComplete.ExecuteIfBound(Result);
+        });
+
+    Request->ProcessRequest();
 }
 
 void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)

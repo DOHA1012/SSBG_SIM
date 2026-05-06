@@ -46,14 +46,14 @@ struct FServerTime
     UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
 };
 
-// ÇÐ»ç º¯µ¿ ·Î±× 1°³
+// ï¿½Ð»ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½ 1ï¿½ï¿½
 USTRUCT(BlueprintType)
 struct FAcademicLogEntry
 {
     GENERATED_BODY()
     UPROPERTY(BlueprintReadWrite) int32   Id = 0;
     UPROPERTY(BlueprintReadWrite) FString ChangeType;   // "attendance" | "assignment"
-    UPROPERTY(BlueprintReadWrite) FString Detail;       // "Ãâ¼® 1È¸ ¡æ Extra +100 / EXP +30 È¹µæ!"
+    UPROPERTY(BlueprintReadWrite) FString Detail;       // "ï¿½â¼® 1È¸ ï¿½ï¿½ Extra +100 / EXP +30 È¹ï¿½ï¿½!"
     UPROPERTY(BlueprintReadWrite) int32   DeltaExtra = 0;
     UPROPERTY(BlueprintReadWrite) int32   DeltaExp = 0;
     UPROPERTY(BlueprintReadWrite) FString CreatedAt;
@@ -65,7 +65,7 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete, bool, bReadyForDreamShop);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived, FServerTime, ServerTime);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnGainCurrencyComplete, bool, bSuccess);
-// ·Î±× Á¶È¸ µ¨¸®°ÔÀÌÆ®
+// ï¿½Î±ï¿½ ï¿½ï¿½È¸ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived, const TArray<FAcademicLogEntry>&, Logs);
 
 UCLASS()
@@ -82,8 +82,8 @@ public:
     UFUNCTION(BlueprintCallable)
     static void SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete);
 
-    UFUNCTION(BlueprintCallable)
-    static FEclassData GetEclassData();
+    UFUNCTION(BlueprintCallable, Category = "API")
+    static void GetEclassData(FString UserId, FOnLoginComplete OnComplete);
 
     UFUNCTION(BlueprintCallable)
     static void SaveEclassData();
@@ -97,7 +97,7 @@ public:
     UFUNCTION(BlueprintCallable)
     static void GetServerTime(FOnServerTimeReceived OnComplete);
 
-    // ÇÐ»ç º¯µ¿ ·Î±× Á¶È¸
+    // ï¿½Ð»ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½ ï¿½ï¿½È¸
     UFUNCTION(BlueprintCallable)
     static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
 
