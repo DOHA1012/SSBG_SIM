@@ -4,6 +4,8 @@
 #include "Interfaces/IHttpRequest.h"
 #include "EclassAPIHandler.generated.h"
 
+// 재화 구조체
+
 USTRUCT(BlueprintType)
 struct FEclassData
 {
@@ -29,7 +31,7 @@ USTRUCT(BlueprintType)
 struct FLoginResult
 {
     GENERATED_BODY()
-    UPROPERTY(BlueprintReadWrite) FEclassData Data;
+    UPROPERTY(BlueprintReadWrite) FEclassData  Data;
     UPROPERTY(BlueprintReadWrite) FEclassDelta Delta;
     UPROPERTY(BlueprintReadWrite) bool  bResetDoneToday = false;
     UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
@@ -46,18 +48,61 @@ struct FServerTime
     UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
 };
 
-// �л� ���� �α� 1��
+// 학사 로그 구조체
+
 USTRUCT(BlueprintType)
 struct FAcademicLogEntry
 {
     GENERATED_BODY()
     UPROPERTY(BlueprintReadWrite) int32   Id = 0;
-    UPROPERTY(BlueprintReadWrite) FString ChangeType;   // "attendance" | "assignment"
-    UPROPERTY(BlueprintReadWrite) FString Detail;       // "�⼮ 1ȸ �� Extra +100 / EXP +30 ȹ��!"
+    UPROPERTY(BlueprintReadWrite) FString ChangeType;
+    UPROPERTY(BlueprintReadWrite) FString Detail;
     UPROPERTY(BlueprintReadWrite) int32   DeltaExtra = 0;
     UPROPERTY(BlueprintReadWrite) int32   DeltaExp = 0;
     UPROPERTY(BlueprintReadWrite) FString CreatedAt;
 };
+
+// 아이템 구조체 (FItemInfo → FEclassItemInfo, 엔진 내부 이름 충돌 방지)
+
+USTRUCT(BlueprintType)
+struct FEclassItemOptionInfo
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FString OptionCode;
+    UPROPERTY(BlueprintReadWrite) FString Name;
+    UPROPERTY(BlueprintReadWrite) FString Description;
+    UPROPERTY(BlueprintReadWrite) FString ValueType;   // "multiplier" | "flat" | "chance"
+    UPROPERTY(BlueprintReadWrite) float   Value = 1.0f;
+};
+
+USTRUCT(BlueprintType)
+struct FEclassItemInfo
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FString ItemCode;
+    UPROPERTY(BlueprintReadWrite) FString Name;
+    UPROPERTY(BlueprintReadWrite) FString Description;
+    UPROPERTY(BlueprintReadWrite) FString ItemType;      // "cosmetic" | "relic" | "consumable"
+    UPROPERTY(BlueprintReadWrite) FString CosmeticSlot;  // "hat" | "shirt" | "shoes" | ""
+    UPROPERTY(BlueprintReadWrite) int32   SlotIndex = 0;
+    UPROPERTY(BlueprintReadWrite) bool    bIsEquipped = false;
+    UPROPERTY(BlueprintReadWrite) FString ObtainedAt;
+    UPROPERTY(BlueprintReadWrite) TArray<FEclassItemOptionInfo> Options;
+};
+
+USTRUCT(BlueprintType)
+struct FEclassCollectionEntry
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FString CollectionCode;
+    UPROPERTY(BlueprintReadWrite) FString Name;
+    UPROPERTY(BlueprintReadWrite) FString Description;
+    UPROPERTY(BlueprintReadWrite) FString CollectionType;  // "cosmetic" | "relic"
+    UPROPERTY(BlueprintReadWrite) bool    bIsUnlocked = false;
+    UPROPERTY(BlueprintReadWrite) FString UnlockedAt;
+};
+
+// 델리게이트
 
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnLoginComplete, FLoginResult, Result);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
@@ -65,8 +110,12 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete, bool, bReadyForDreamShop);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived, FServerTime, ServerTime);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnGainCurrencyComplete, bool, bSuccess);
-// �α� ��ȸ ��������Ʈ
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived, const TArray<FAcademicLogEntry>&, Logs);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived, const TArray<FEclassItemInfo>&, Items);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived, const TArray<FEclassCollectionEntry>&, Entries);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult, bool, bSuccess);
+
+// 클래스
 
 UCLASS()
 class SSBG_SIM_API UEclassAPIHandler : public UBlueprintFunctionLibrary
@@ -76,6 +125,9 @@ public:
     UFUNCTION(BlueprintCallable)
     static void Login(FString UserId, FOnLoginComplete OnComplete);
 
+    UFUNCTION(BlueprintCallable, Category = "API")
+    static void GetEclassData(FString UserId, FOnLoginComplete OnComplete);
+
     UFUNCTION(BlueprintCallable)
     static void RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete);
 
@@ -83,23 +135,38 @@ public:
     static void SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete);
 
     UFUNCTION(BlueprintCallable, Category = "API")
-    static void GetEclassData(FString UserId, FOnLoginComplete OnComplete);
+    static void GainCurrency(FString UserId, int32 Amount, FString CurrencyType);
+
+    UFUNCTION(BlueprintCallable)
+    static void GetServerTime(FOnServerTimeReceived OnComplete);
+
+    UFUNCTION(BlueprintCallable)
+    static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
+
+    // 인벤토리
+    // ItemType: "" = 전체 / "cosmetic" / "relic" / "consumable"
+    UFUNCTION(BlueprintCallable, Category = "API|Inventory")
+    static void GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete);
+
+    UFUNCTION(BlueprintCallable, Category = "API|Inventory")
+    static void GetEquippedItems(FString UserId, FOnInventoryReceived OnComplete);
+
+    UFUNCTION(BlueprintCallable, Category = "API|Inventory")
+    static void EquipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
+
+    UFUNCTION(BlueprintCallable, Category = "API|Inventory")
+    static void UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
+
+    // 도감
+    // CollectionType: "" = 전체 / "cosmetic" / "relic"
+    UFUNCTION(BlueprintCallable, Category = "API|Collection")
+    static void GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete);
 
     UFUNCTION(BlueprintCallable)
     static void SaveEclassData();
 
     UFUNCTION(BlueprintCallable)
     static void LoadEclassData();
-
-    UFUNCTION(BlueprintCallable, Category = "API")
-    static void GainCurrency(FString UserId, int32 Amount, FString CurrencyType);
-
-    UFUNCTION(BlueprintCallable)
-    static void GetServerTime(FOnServerTimeReceived OnComplete);
-
-    // �л� ���� �α� ��ȸ
-    UFUNCTION(BlueprintCallable)
-    static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
 
 private:
     static FEclassData CachedData;

@@ -10,11 +10,13 @@
 
 FEclassData UEclassAPIHandler::CachedData;
 
-//오라클 서버 주소
+// 오라클 서버 주소
 static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
 
 // 로컬 서버 주소
 //static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
+
+// 헬퍼
 
 static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
 {
@@ -34,7 +36,51 @@ static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
     return Result;
 }
 
+static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
+{
+    FEclassItemInfo Item;
+    if (!Obj.IsValid()) return Item;
+
+    int32 SlotIndex = 0;
+    bool bEquipped = false;
+    Obj->TryGetStringField(TEXT("itemCode"), Item.ItemCode);
+    Obj->TryGetStringField(TEXT("name"), Item.Name);
+    Obj->TryGetStringField(TEXT("description"), Item.Description);
+    Obj->TryGetStringField(TEXT("itemType"), Item.ItemType);
+    Obj->TryGetStringField(TEXT("cosmeticSlot"), Item.CosmeticSlot);
+    Obj->TryGetStringField(TEXT("obtainedAt"), Item.ObtainedAt);
+    Obj->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
+    Obj->TryGetBoolField(TEXT("isEquipped"), bEquipped);
+
+    Item.SlotIndex = SlotIndex;
+    Item.bIsEquipped = bEquipped;
+
+    const TArray<TSharedPtr<FJsonValue>>* OptionsArr;
+    if (Obj->TryGetArrayField(TEXT("options"), OptionsArr))
+    {
+        for (const TSharedPtr<FJsonValue>& Val : *OptionsArr)
+        {
+            const TSharedPtr<FJsonObject>& OptObj = Val->AsObject();
+            if (!OptObj.IsValid()) continue;
+
+            FEclassItemOptionInfo Opt;
+            double Value = 1.0;
+            OptObj->TryGetStringField(TEXT("optionCode"), Opt.OptionCode);
+            OptObj->TryGetStringField(TEXT("name"), Opt.Name);
+            OptObj->TryGetStringField(TEXT("description"), Opt.Description);
+            OptObj->TryGetStringField(TEXT("valueType"), Opt.ValueType);
+            OptObj->TryGetNumberField(TEXT("value"), Value);
+            Opt.Value = (float)Value;
+
+            Item.Options.Add(Opt);
+        }
+    }
+
+    return Item;
+}
+
 // 1. Login
+
 void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -118,7 +164,49 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
     Request->ProcessRequest();
 }
 
-// 2. SpendCurrency
+// 2. GetEclassData
+
+void UEclassAPIHandler::GetEclassData(FString UserId, FOnLoginComplete OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/user/") + UserId);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            FLoginResult Result;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetEclassData] Request Failed"));
+                OnComplete.ExecuteIfBound(Result);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    Result.Data = ParseUserJson(*UserObj);
+                    UEclassAPIHandler::ApplyAndCache(Result.Data);
+                }
+            }
+
+            OnComplete.ExecuteIfBound(Result);
+        });
+
+    Request->ProcessRequest();
+}
+
+// 3. SpendCurrency
+
 void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -166,90 +254,49 @@ void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int3
     Request->ProcessRequest();
 }
 
-// 3. 캐시 반환 / 저장 / 불러오기
-void UEclassAPIHandler::GetEclassData(FString UserId, FOnLoginComplete OnComplete)
+// 4. GainCurrency
+
+void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString CurrencyType)
 {
-    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
-    // 로그인 API가 아닌, 데이터 조회 전용 API(/user/아이디)를 호출합니다.
-    Request->SetURL(GAME_SERVER + TEXT("/user/") + UserId);
-    Request->SetVerb("GET");
-    Request->SetHeader("Content-Type", "application/json");
+    TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
+    JsonObj->SetStringField(TEXT("userId"), UserId);
+    JsonObj->SetNumberField(TEXT("amount"), Amount);
+    JsonObj->SetStringField(TEXT("currencyType"), CurrencyType);
 
-    Request->OnProcessRequestComplete().BindLambda(
-        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+    FString JsonString;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+    FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
+
+    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/currency/gain"));
+    Request->SetVerb(TEXT("POST"));
+    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+    Request->SetContentAsString(JsonString);
+
+    Request->OnProcessRequestComplete().BindLambda([UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
-            FLoginResult Result;
-
-            if (!bSuccess || !Res.IsValid())
+            if (bSuccess && Res.IsValid())
             {
-                UE_LOG(LogTemp, Error, TEXT("[GetEclassData] Request Failed"));
-                OnComplete.ExecuteIfBound(Result);
-                return;
-            }
-
-            TSharedPtr<FJsonObject> Root;
-            TSharedRef<TJsonReader<>> Reader =
-                TJsonReaderFactory<>::Create(Res->GetContentAsString());
-
-            if (FJsonSerializer::Deserialize(Reader, Root))
-            {
-                const TSharedPtr<FJsonObject>* UserObj;
-                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                TSharedPtr<FJsonObject> RootObj;
+                TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
+                if (FJsonSerializer::Deserialize(Reader, RootObj))
                 {
-                    Result.Data = ParseUserJson(*UserObj);
-                    UEclassAPIHandler::ApplyAndCache(Result.Data);
+                    FEclassData NewSyncedData = ParseUserJson(RootObj->GetObjectField(TEXT("current")).ToSharedRef());
+                    ApplyAndCache(NewSyncedData);
+                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s - AC:%d"), *UserId, NewSyncedData.AcademicCurrency);
                 }
             }
-
-            OnComplete.ExecuteIfBound(Result);
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GainCurrency] Request Failed"));
+            }
         });
 
     Request->ProcessRequest();
 }
 
-void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
-{
-    CachedData = NewData;
-    SaveEclassData();
+// 5. RequestDailyReset
 
-    UE_LOG(LogTemp, Warning, TEXT("[Cache] Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
-        CachedData.AcademicCurrency,
-        CachedData.ExtraCurrency,
-        CachedData.IdleCurrency,
-        CachedData.Exp);
-}
-
-void UEclassAPIHandler::SaveEclassData()
-{
-    UEclassSaveGame* Save = Cast<UEclassSaveGame>(
-        UGameplayStatics::CreateSaveGameObject(UEclassSaveGame::StaticClass()));
-    if (Save)
-    {
-        Save->AcademicCurrency = CachedData.AcademicCurrency;
-        Save->ExtraCurrency = CachedData.ExtraCurrency;
-        Save->IdleCurrency = CachedData.IdleCurrency;
-        Save->Exp = CachedData.Exp;
-        UGameplayStatics::SaveGameToSlot(Save, TEXT("EclassSlot"), 0);
-    }
-}
-
-void UEclassAPIHandler::LoadEclassData()
-{
-    if (UGameplayStatics::DoesSaveGameExist(TEXT("EclassSlot"), 0))
-    {
-        UEclassSaveGame* Load = Cast<UEclassSaveGame>(
-            UGameplayStatics::LoadGameFromSlot(TEXT("EclassSlot"), 0));
-        if (Load)
-        {
-            CachedData.AcademicCurrency = Load->AcademicCurrency;
-            CachedData.ExtraCurrency = Load->ExtraCurrency;
-            CachedData.IdleCurrency = Load->IdleCurrency;
-            CachedData.Exp = Load->Exp;
-        }
-    }
-}
-
-// 4. RequestDailyReset
 void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -292,48 +339,8 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
     Request->ProcessRequest();
 }
 
-// 5. GainCurrency
-void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString CurrencyType)
-{
-    TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
-    JsonObj->SetStringField(TEXT("userId"), UserId);
-    JsonObj->SetNumberField(TEXT("amount"), Amount);
-    JsonObj->SetStringField(TEXT("currencyType"), CurrencyType);
-
-    FString JsonString;
-    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
-    FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
-
-    TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(GAME_SERVER + TEXT("/currency/gain"));
-    Request->SetVerb(TEXT("POST"));
-    Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-    Request->SetContentAsString(JsonString);
-
-    Request->OnProcessRequestComplete().BindLambda([UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
-        {
-            if (bSuccess && Res.IsValid())
-            {
-                TSharedPtr<FJsonObject> RootObj;
-                TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
-
-                if (FJsonSerializer::Deserialize(Reader, RootObj))
-                {
-                    FEclassData NewSyncedData = ParseUserJson(RootObj->GetObjectField(TEXT("current")).ToSharedRef());
-                    ApplyAndCache(NewSyncedData);
-                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s - AC:%d"), *UserId, NewSyncedData.AcademicCurrency);
-                }
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("[GainCurrency] Request Failed"));
-            }
-        });
-
-    Request->ProcessRequest();
-}
-
 // 6. GetServerTime
+
 void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -379,7 +386,8 @@ void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
     Request->ProcessRequest();
 }
 
-// 7. GetAcademicLog - 학사 변동 로그 조회
+// 7. GetAcademicLog
+
 void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -418,14 +426,13 @@ void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived On
                         Obj->TryGetNumberField(TEXT("id"), Id);
                         Obj->TryGetNumberField(TEXT("deltaExtra"), DeltaExtra);
                         Obj->TryGetNumberField(TEXT("deltaExp"), DeltaExp);
-
-                        Entry.Id = Id;
-                        Entry.DeltaExtra = DeltaExtra;
-                        Entry.DeltaExp = DeltaExp;
                         Obj->TryGetStringField(TEXT("changeType"), Entry.ChangeType);
                         Obj->TryGetStringField(TEXT("detail"), Entry.Detail);
                         Obj->TryGetStringField(TEXT("createdAt"), Entry.CreatedAt);
 
+                        Entry.Id = Id;
+                        Entry.DeltaExtra = DeltaExtra;
+                        Entry.DeltaExp = DeltaExp;
                         Logs.Add(Entry);
                     }
                 }
@@ -436,4 +443,282 @@ void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived On
         });
 
     Request->ProcessRequest();
+}
+
+// 8. GetInventory
+// ItemType: "" = 전체 / "cosmetic" / "relic" / "consumable"
+
+void UEclassAPIHandler::GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete)
+{
+    FString URL = ItemType.IsEmpty()
+        ? GAME_SERVER + TEXT("/inventory/") + UserId + TEXT("/tab")
+        : GAME_SERVER + TEXT("/inventory/") + UserId + TEXT("/tab?type=") + ItemType;
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(URL);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, ItemType](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            TArray<FEclassItemInfo> Items;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetInventory] Request Failed"));
+                OnComplete.ExecuteIfBound(Items);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TArray<TSharedPtr<FJsonValue>>* ItemArray;
+                if (Root->TryGetArrayField(TEXT("items"), ItemArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& Val : *ItemArray)
+                    {
+                        Items.Add(ParseItemJson(Val->AsObject()));
+                    }
+                }
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("[GetInventory] Type:%s | %d items"),
+                ItemType.IsEmpty() ? TEXT("All") : *ItemType, Items.Num());
+            OnComplete.ExecuteIfBound(Items);
+        });
+
+    Request->ProcessRequest();
+}
+
+// 9. GetEquippedItems
+
+void UEclassAPIHandler::GetEquippedItems(FString UserId, FOnInventoryReceived OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/inventory/") + UserId + TEXT("/equipped"));
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            TArray<FEclassItemInfo> Items;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetEquippedItems] Request Failed"));
+                OnComplete.ExecuteIfBound(Items);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TArray<TSharedPtr<FJsonValue>>* ItemArray;
+                if (Root->TryGetArrayField(TEXT("items"), ItemArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& Val : *ItemArray)
+                    {
+                        Items.Add(ParseItemJson(Val->AsObject()));
+                    }
+                }
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("[GetEquippedItems] %d items"), Items.Num());
+            OnComplete.ExecuteIfBound(Items);
+        });
+
+    Request->ProcessRequest();
+}
+
+// 10. EquipItem
+
+void UEclassAPIHandler::EquipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/inventory/equip"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(
+        FString::Printf(TEXT("{\"userId\":\"%s\",\"itemCode\":\"%s\"}"), *UserId, *ItemCode)
+    );
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, ItemCode](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[EquipItem] Request Failed"));
+                OnComplete.ExecuteIfBound(false);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bOk = false;
+                Root->TryGetBoolField(TEXT("success"), bOk);
+                UE_LOG(LogTemp, Log, TEXT("[EquipItem] %s - %s"),
+                    *ItemCode, bOk ? TEXT("Success") : TEXT("Failed"));
+                OnComplete.ExecuteIfBound(bOk);
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+// 11. UnequipItem
+
+void UEclassAPIHandler::UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/inventory/unequip"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(
+        FString::Printf(TEXT("{\"userId\":\"%s\",\"itemCode\":\"%s\"}"), *UserId, *ItemCode)
+    );
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, ItemCode](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[UnequipItem] Request Failed"));
+                OnComplete.ExecuteIfBound(false);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bOk = false;
+                Root->TryGetBoolField(TEXT("success"), bOk);
+                UE_LOG(LogTemp, Log, TEXT("[UnequipItem] %s - %s"),
+                    *ItemCode, bOk ? TEXT("Success") : TEXT("Failed"));
+                OnComplete.ExecuteIfBound(bOk);
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+// 12. GetCollection
+// CollectionType: "" = 전체 / "cosmetic" / "relic"
+
+void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete)
+{
+    FString URL = CollectionType.IsEmpty()
+        ? GAME_SERVER + TEXT("/collection/") + UserId
+        : GAME_SERVER + TEXT("/collection/") + UserId + TEXT("?type=") + CollectionType;
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(URL);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            TArray<FEclassCollectionEntry> Entries;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetCollection] Request Failed"));
+                OnComplete.ExecuteIfBound(Entries);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TArray<TSharedPtr<FJsonValue>>* EntryArray;
+                if (Root->TryGetArrayField(TEXT("entries"), EntryArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& Val : *EntryArray)
+                    {
+                        const TSharedPtr<FJsonObject>& Obj = Val->AsObject();
+                        if (!Obj.IsValid()) continue;
+
+                        FEclassCollectionEntry Entry;
+                        bool bUnlocked = false;
+                        Obj->TryGetStringField(TEXT("collectionCode"), Entry.CollectionCode);
+                        Obj->TryGetStringField(TEXT("name"), Entry.Name);
+                        Obj->TryGetStringField(TEXT("description"), Entry.Description);
+                        Obj->TryGetStringField(TEXT("collectionType"), Entry.CollectionType);
+                        Obj->TryGetStringField(TEXT("unlockedAt"), Entry.UnlockedAt);
+                        Obj->TryGetBoolField(TEXT("isUnlocked"), bUnlocked);
+                        Entry.bIsUnlocked = bUnlocked;
+
+                        Entries.Add(Entry);
+                    }
+                }
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("[GetCollection] %d entries"), Entries.Num());
+            OnComplete.ExecuteIfBound(Entries);
+        });
+
+    Request->ProcessRequest();
+}
+
+// 캐시
+
+void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
+{
+    CachedData = NewData;
+    SaveEclassData();
+
+    UE_LOG(LogTemp, Warning, TEXT("[Cache] Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
+        CachedData.AcademicCurrency,
+        CachedData.ExtraCurrency,
+        CachedData.IdleCurrency,
+        CachedData.Exp);
+}
+
+void UEclassAPIHandler::SaveEclassData()
+{
+    UEclassSaveGame* Save = Cast<UEclassSaveGame>(
+        UGameplayStatics::CreateSaveGameObject(UEclassSaveGame::StaticClass()));
+    if (Save)
+    {
+        Save->AcademicCurrency = CachedData.AcademicCurrency;
+        Save->ExtraCurrency = CachedData.ExtraCurrency;
+        Save->IdleCurrency = CachedData.IdleCurrency;
+        Save->Exp = CachedData.Exp;
+        UGameplayStatics::SaveGameToSlot(Save, TEXT("EclassSlot"), 0);
+    }
+}
+
+void UEclassAPIHandler::LoadEclassData()
+{
+    if (UGameplayStatics::DoesSaveGameExist(TEXT("EclassSlot"), 0))
+    {
+        UEclassSaveGame* Load = Cast<UEclassSaveGame>(
+            UGameplayStatics::LoadGameFromSlot(TEXT("EclassSlot"), 0));
+        if (Load)
+        {
+            CachedData.AcademicCurrency = Load->AcademicCurrency;
+            CachedData.ExtraCurrency = Load->ExtraCurrency;
+            CachedData.IdleCurrency = Load->IdleCurrency;
+            CachedData.Exp = Load->Exp;
+        }
+    }
 }
