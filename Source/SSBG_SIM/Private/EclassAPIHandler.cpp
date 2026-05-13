@@ -16,7 +16,9 @@ static const FString GAME_SERVER = TEXT("http://134.185.100.53:3000/api");
 // 로컬 서버 주소
 //static const FString GAME_SERVER = TEXT("http://127.0.0.1:3000/api");
 
+// ================================================================
 // 헬퍼
+// ================================================================
 
 static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
 {
@@ -47,7 +49,6 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
     Obj->TryGetStringField(TEXT("name"), Item.Name);
     Obj->TryGetStringField(TEXT("description"), Item.Description);
     Obj->TryGetStringField(TEXT("itemType"), Item.ItemType);
-    Obj->TryGetStringField(TEXT("cosmeticSlot"), Item.CosmeticSlot);
     Obj->TryGetStringField(TEXT("obtainedAt"), Item.ObtainedAt);
     Obj->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
     Obj->TryGetBoolField(TEXT("isEquipped"), bEquipped);
@@ -79,7 +80,9 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
     return Item;
 }
 
+// ================================================================
 // 1. Login
+// ================================================================
 
 void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 {
@@ -164,7 +167,9 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 2. GetEclassData
+// ================================================================
 
 void UEclassAPIHandler::GetEclassData(FString UserId, FOnLoginComplete OnComplete)
 {
@@ -205,7 +210,9 @@ void UEclassAPIHandler::GetEclassData(FString UserId, FOnLoginComplete OnComplet
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 3. SpendCurrency
+// ================================================================
 
 void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete)
 {
@@ -254,7 +261,9 @@ void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int3
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 4. GainCurrency
+// ================================================================
 
 void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString CurrencyType)
 {
@@ -295,7 +304,9 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 5. RequestDailyReset
+// ================================================================
 
 void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete)
 {
@@ -339,7 +350,9 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 6. GetServerTime
+// ================================================================
 
 void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
 {
@@ -386,7 +399,9 @@ void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 7. GetAcademicLog
+// ================================================================
 
 void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete)
 {
@@ -445,8 +460,10 @@ void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived On
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 8. GetInventory
-// ItemType: "" = 전체 / "cosmetic" / "relic" / "consumable"
+// ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
+// ================================================================
 
 void UEclassAPIHandler::GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete)
 {
@@ -495,7 +512,9 @@ void UEclassAPIHandler::GetInventory(FString UserId, FString ItemType, FOnInvent
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 9. GetEquippedItems
+// ================================================================
 
 void UEclassAPIHandler::GetEquippedItems(FString UserId, FOnInventoryReceived OnComplete)
 {
@@ -539,7 +558,9 @@ void UEclassAPIHandler::GetEquippedItems(FString UserId, FOnInventoryReceived On
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 10. EquipItem
+// ================================================================
 
 void UEclassAPIHandler::EquipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete)
 {
@@ -578,7 +599,9 @@ void UEclassAPIHandler::EquipItem(FString UserId, FString ItemCode, FOnEquipResu
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 11. UnequipItem
+// ================================================================
 
 void UEclassAPIHandler::UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete)
 {
@@ -617,8 +640,10 @@ void UEclassAPIHandler::UnequipItem(FString UserId, FString ItemCode, FOnEquipRe
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 12. GetCollection
-// CollectionType: "" = 전체 / "cosmetic" / "relic"
+// CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
+// ================================================================
 
 void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete)
 {
@@ -679,7 +704,9 @@ void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FO
     Request->ProcessRequest();
 }
 
+// ================================================================
 // 캐시
+// ================================================================
 
 void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
 {

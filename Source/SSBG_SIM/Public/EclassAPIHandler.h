@@ -4,7 +4,9 @@
 #include "Interfaces/IHttpRequest.h"
 #include "EclassAPIHandler.generated.h"
 
+// ================================================================
 // 재화 구조체
+// ================================================================
 
 USTRUCT(BlueprintType)
 struct FEclassData
@@ -48,7 +50,9 @@ struct FServerTime
     UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
 };
 
+// ================================================================
 // 학사 로그 구조체
+// ================================================================
 
 USTRUCT(BlueprintType)
 struct FAcademicLogEntry
@@ -62,7 +66,10 @@ struct FAcademicLogEntry
     UPROPERTY(BlueprintReadWrite) FString CreatedAt;
 };
 
-// 아이템 구조체 (FItemInfo → FEclassItemInfo, 엔진 내부 이름 충돌 방지)
+// ================================================================
+// 아이템 구조체
+// ItemType: "Hat" | "Bag" | "Clothes" | "Theme" | "Friend" | "Consumable"
+// ================================================================
 
 USTRUCT(BlueprintType)
 struct FEclassItemOptionInfo
@@ -82,8 +89,7 @@ struct FEclassItemInfo
     UPROPERTY(BlueprintReadWrite) FString ItemCode;
     UPROPERTY(BlueprintReadWrite) FString Name;
     UPROPERTY(BlueprintReadWrite) FString Description;
-    UPROPERTY(BlueprintReadWrite) FString ItemType;      // "cosmetic" | "relic" | "consumable"
-    UPROPERTY(BlueprintReadWrite) FString CosmeticSlot;  // "hat" | "shirt" | "shoes" | ""
+    UPROPERTY(BlueprintReadWrite) FString ItemType;    // "Hat"|"Bag"|"Clothes"|"Theme"|"Friend"|"Consumable"
     UPROPERTY(BlueprintReadWrite) int32   SlotIndex = 0;
     UPROPERTY(BlueprintReadWrite) bool    bIsEquipped = false;
     UPROPERTY(BlueprintReadWrite) FString ObtainedAt;
@@ -97,12 +103,14 @@ struct FEclassCollectionEntry
     UPROPERTY(BlueprintReadWrite) FString CollectionCode;
     UPROPERTY(BlueprintReadWrite) FString Name;
     UPROPERTY(BlueprintReadWrite) FString Description;
-    UPROPERTY(BlueprintReadWrite) FString CollectionType;  // "cosmetic" | "relic"
+    UPROPERTY(BlueprintReadWrite) FString CollectionType;
     UPROPERTY(BlueprintReadWrite) bool    bIsUnlocked = false;
     UPROPERTY(BlueprintReadWrite) FString UnlockedAt;
 };
 
+// ================================================================
 // 델리게이트
+// ================================================================
 
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnLoginComplete, FLoginResult, Result);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
@@ -115,7 +123,9 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived, const TArray<FEclassItem
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived, const TArray<FEclassCollectionEntry>&, Entries);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult, bool, bSuccess);
 
+// ================================================================
 // 클래스
+// ================================================================
 
 UCLASS()
 class SSBG_SIM_API UEclassAPIHandler : public UBlueprintFunctionLibrary
@@ -144,7 +154,7 @@ public:
     static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
 
     // 인벤토리
-    // ItemType: "" = 전체 / "cosmetic" / "relic" / "consumable"
+    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete);
 
@@ -158,7 +168,7 @@ public:
     static void UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
 
     // 도감
-    // CollectionType: "" = 전체 / "cosmetic" / "relic"
+    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete);
 
