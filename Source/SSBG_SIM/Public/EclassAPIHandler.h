@@ -12,6 +12,7 @@ USTRUCT(BlueprintType)
 struct FEclassData
 {
     GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FString StudentId;
     UPROPERTY(BlueprintReadWrite) int32 AcademicCurrency = 0;
     UPROPERTY(BlueprintReadWrite) int32 ExtraCurrency = 0;
     UPROPERTY(BlueprintReadWrite) int32 IdleCurrency = 0;
@@ -68,7 +69,7 @@ struct FAcademicLogEntry
 
 // ================================================================
 // 아이템 구조체
-// ItemType: "Hat" | "Bag" | "Clothes" | "Theme" | "Friend" | "Consumable"
+// ItemType: "Hat" | "Bag" | "Clothes" | "Theme" | "Friend" | "Consumable" | "relic"
 // ================================================================
 
 USTRUCT(BlueprintType)
@@ -89,7 +90,8 @@ struct FEclassItemInfo
     UPROPERTY(BlueprintReadWrite) FString ItemCode;
     UPROPERTY(BlueprintReadWrite) FString Name;
     UPROPERTY(BlueprintReadWrite) FString Description;
-    UPROPERTY(BlueprintReadWrite) FString ItemType;    // "Hat"|"Bag"|"Clothes"|"Theme"|"Friend"|"Consumable"
+    UPROPERTY(BlueprintReadWrite) FString ItemType;    // "Hat"|"Bag"|"Clothes"|"Theme"|"Friend"|"Consumable"|"relic"
+    UPROPERTY(BlueprintReadWrite) FString CosmeticSlot;
     UPROPERTY(BlueprintReadWrite) int32   SlotIndex = 0;
     UPROPERTY(BlueprintReadWrite) bool    bIsEquipped = false;
     UPROPERTY(BlueprintReadWrite) FString ObtainedAt;
@@ -154,7 +156,7 @@ public:
     static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
 
     // 인벤토리
-    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
+    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete);
 
@@ -168,7 +170,7 @@ public:
     static void UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
 
     // 도감
-    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
+    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete);
 

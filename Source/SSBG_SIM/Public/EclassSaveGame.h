@@ -11,6 +11,7 @@ class SSBG_SIM_API UEclassSaveGame : public USaveGame
 
 public:
 
+    UPROPERTY(VisibleAnywhere) FString StudentId;
     UPROPERTY(VisibleAnywhere) int32 AcademicCurrency = 0;
     UPROPERTY(VisibleAnywhere) int32 ExtraCurrency = 0;
     UPROPERTY(VisibleAnywhere) int32 IdleCurrency = 0;

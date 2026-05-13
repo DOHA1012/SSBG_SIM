@@ -26,6 +26,7 @@ static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
     if (!UserObj.IsValid()) return Result;
 
     int32 AC = 0, EC = 0, IC = 0, E = 0;
+    UserObj->TryGetStringField(TEXT("studentId"), Result.StudentId);
     UserObj->TryGetNumberField(TEXT("academicCurrency"), AC);
     UserObj->TryGetNumberField(TEXT("extraCurrency"), EC);
     UserObj->TryGetNumberField(TEXT("idleCurrency"), IC);
@@ -49,6 +50,7 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
     Obj->TryGetStringField(TEXT("name"), Item.Name);
     Obj->TryGetStringField(TEXT("description"), Item.Description);
     Obj->TryGetStringField(TEXT("itemType"), Item.ItemType);
+    Obj->TryGetStringField(TEXT("cosmeticSlot"), Item.CosmeticSlot);
     Obj->TryGetStringField(TEXT("obtainedAt"), Item.ObtainedAt);
     Obj->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
     Obj->TryGetBoolField(TEXT("isEquipped"), bEquipped);
@@ -713,7 +715,8 @@ void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
     CachedData = NewData;
     SaveEclassData();
 
-    UE_LOG(LogTemp, Warning, TEXT("[Cache] Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
+    UE_LOG(LogTemp, Warning, TEXT("[Cache] StudentId: %s, Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
+        *CachedData.StudentId,
         CachedData.AcademicCurrency,
         CachedData.ExtraCurrency,
         CachedData.IdleCurrency,
@@ -726,6 +729,7 @@ void UEclassAPIHandler::SaveEclassData()
         UGameplayStatics::CreateSaveGameObject(UEclassSaveGame::StaticClass()));
     if (Save)
     {
+        Save->StudentId = CachedData.StudentId;
         Save->AcademicCurrency = CachedData.AcademicCurrency;
         Save->ExtraCurrency = CachedData.ExtraCurrency;
         Save->IdleCurrency = CachedData.IdleCurrency;
@@ -742,6 +746,7 @@ void UEclassAPIHandler::LoadEclassData()
             UGameplayStatics::LoadGameFromSlot(TEXT("EclassSlot"), 0));
         if (Load)
         {
+            CachedData.StudentId = Load->StudentId;
             CachedData.AcademicCurrency = Load->AcademicCurrency;
             CachedData.ExtraCurrency = Load->ExtraCurrency;
             CachedData.IdleCurrency = Load->IdleCurrency;
