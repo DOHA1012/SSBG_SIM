@@ -4,10 +4,6 @@
 #include "Interfaces/IHttpRequest.h"
 #include "EclassAPIHandler.generated.h"
 
-// ================================================================
-// 재화 구조체
-// ================================================================
-
 USTRUCT(BlueprintType)
 struct FEclassData
 {
@@ -34,6 +30,8 @@ USTRUCT(BlueprintType)
 struct FLoginResult
 {
     GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) bool        bLoginSuccess = false;   // 로그인 성공 여부
+    UPROPERTY(BlueprintReadWrite) FString     LoginMessage;            // 실패 시 메시지
     UPROPERTY(BlueprintReadWrite) FEclassData  Data;
     UPROPERTY(BlueprintReadWrite) FEclassDelta Delta;
     UPROPERTY(BlueprintReadWrite) bool  bResetDoneToday = false;
@@ -51,10 +49,6 @@ struct FServerTime
     UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
 };
 
-// ================================================================
-// 학사 로그 구조체
-// ================================================================
-
 USTRUCT(BlueprintType)
 struct FAcademicLogEntry
 {
@@ -67,11 +61,6 @@ struct FAcademicLogEntry
     UPROPERTY(BlueprintReadWrite) FString CreatedAt;
 };
 
-// ================================================================
-// 아이템 구조체
-// ItemType: "Hat" | "Bag" | "Clothes" | "Theme" | "Friend" | "Consumable" | "relic"
-// ================================================================
-
 USTRUCT(BlueprintType)
 struct FEclassItemOptionInfo
 {
@@ -79,7 +68,7 @@ struct FEclassItemOptionInfo
     UPROPERTY(BlueprintReadWrite) FString OptionCode;
     UPROPERTY(BlueprintReadWrite) FString Name;
     UPROPERTY(BlueprintReadWrite) FString Description;
-    UPROPERTY(BlueprintReadWrite) FString ValueType;   // "multiplier" | "flat" | "chance"
+    UPROPERTY(BlueprintReadWrite) FString ValueType;
     UPROPERTY(BlueprintReadWrite) float   Value = 1.0f;
 };
 
@@ -90,7 +79,7 @@ struct FEclassItemInfo
     UPROPERTY(BlueprintReadWrite) FString ItemCode;
     UPROPERTY(BlueprintReadWrite) FString Name;
     UPROPERTY(BlueprintReadWrite) FString Description;
-    UPROPERTY(BlueprintReadWrite) FString ItemType;    // "Hat"|"Bag"|"Clothes"|"Theme"|"Friend"|"Consumable"|"relic"
+    UPROPERTY(BlueprintReadWrite) FString ItemType;
     UPROPERTY(BlueprintReadWrite) FString CosmeticSlot;
     UPROPERTY(BlueprintReadWrite) int32   SlotIndex = 0;
     UPROPERTY(BlueprintReadWrite) bool    bIsEquipped = false;
@@ -124,6 +113,8 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived, const TArray<FAcademic
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived, const TArray<FEclassItemInfo>&, Items);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived, const TArray<FEclassCollectionEntry>&, Entries);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult, bool, bSuccess);
+// 해금된 itemCode 배열 반환용
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUnlockedCodesReceived, const TArray<FString>&, ItemCodes);
 
 // ================================================================
 // 클래스
@@ -156,7 +147,6 @@ public:
     static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
 
     // 인벤토리
-    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete);
 
@@ -169,10 +159,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
 
-    // 도감
-    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
+    // 도감 전체 조회
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete);
+
+    // 해금된 itemCode 목록만 조회 (엔진 아이템 테이블 비교용)
+    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
+    UFUNCTION(BlueprintCallable, Category = "API|Collection")
+    static void GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete);
 
     UFUNCTION(BlueprintCallable)
     static void SaveEclassData();
