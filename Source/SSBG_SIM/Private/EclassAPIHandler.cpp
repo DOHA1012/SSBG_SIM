@@ -105,6 +105,8 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
             {
                 UE_LOG(LogTemp, Error, TEXT("[Login] Request Failed - Using Local Data"));
                 UEclassAPIHandler::LoadEclassData();
+                LoginResult.bLoginSuccess = false;
+                LoginResult.LoginMessage = TEXT("서버 연결 실패");
                 LoginResult.Data = UEclassAPIHandler::CachedData;
                 OnComplete.ExecuteIfBound(LoginResult);
                 return;
@@ -116,9 +118,24 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 
             if (FJsonSerializer::Deserialize(Reader, Root))
             {
+                // 학번 검증 실패 처리
+                bool bServerSuccess = false;
+                Root->TryGetBoolField(TEXT("success"), bServerSuccess);
+                if (!bServerSuccess)
+                {
+                    FString Message;
+                    Root->TryGetStringField(TEXT("message"), Message);
+                    UE_LOG(LogTemp, Warning, TEXT("[Login] Rejected: %s"), *Message);
+                    LoginResult.bLoginSuccess = false;
+                    LoginResult.LoginMessage = Message;
+                    OnComplete.ExecuteIfBound(LoginResult);
+                    return;
+                }
+
                 const TSharedPtr<FJsonObject>* UserObj;
                 if (Root->TryGetObjectField(TEXT("user"), UserObj))
                 {
+                    LoginResult.bLoginSuccess = true;
                     LoginResult.Data = ParseUserJson(*UserObj);
                     UEclassAPIHandler::ApplyAndCache(LoginResult.Data);
 
@@ -464,7 +481,6 @@ void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived On
 
 // ================================================================
 // 8. GetInventory
-// ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
 // ================================================================
 
 void UEclassAPIHandler::GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete)
@@ -644,7 +660,6 @@ void UEclassAPIHandler::UnequipItem(FString UserId, FString ItemCode, FOnEquipRe
 
 // ================================================================
 // 12. GetCollection
-// CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
 // ================================================================
 
 void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete)
@@ -707,6 +722,57 @@ void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FO
 }
 
 // ================================================================
+// 13. GetUnlockedItemCodes - 해금된 itemCode 목록만 조회
+// ================================================================
+
+void UEclassAPIHandler::GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete)
+{
+    FString URL = CollectionType.IsEmpty()
+        ? GAME_SERVER + TEXT("/collection/") + UserId + TEXT("/unlocked")
+        : GAME_SERVER + TEXT("/collection/") + UserId + TEXT("/unlocked?type=") + CollectionType;
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(URL);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, CollectionType](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            TArray<FString> ItemCodes;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetUnlockedItemCodes] Request Failed"));
+                OnComplete.ExecuteIfBound(ItemCodes);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TArray<TSharedPtr<FJsonValue>>* CodesArray;
+                if (Root->TryGetArrayField(TEXT("itemCodes"), CodesArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& Val : *CodesArray)
+                    {
+                        ItemCodes.Add(Val->AsString());
+                    }
+                }
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("[GetUnlockedItemCodes] Type:%s | %d codes"),
+                CollectionType.IsEmpty() ? TEXT("All") : *CollectionType, ItemCodes.Num());
+            OnComplete.ExecuteIfBound(ItemCodes);
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
 // 캐시
 // ================================================================
 
@@ -715,7 +781,7 @@ void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
     CachedData = NewData;
     SaveEclassData();
 
-    UE_LOG(LogTemp, Warning, TEXT("[Cache] StudentId: %s, Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
+    UE_LOG(LogTemp, Warning, TEXT("[Cache] StudentId: %s | Academic: %d, Extra: %d, Idle: %d, Exp: %d"),
         *CachedData.StudentId,
         CachedData.AcademicCurrency,
         CachedData.ExtraCurrency,
