@@ -34,12 +34,12 @@ USTRUCT(BlueprintType)
 struct FLoginResult
 {
     GENERATED_BODY()
-    UPROPERTY(BlueprintReadWrite) bool        bLoginSuccess = false;  // 로그인 성공 여부
-    UPROPERTY(BlueprintReadWrite) FString     LoginMessage;           // 실패 시 메시지
-    UPROPERTY(BlueprintReadWrite) FEclassData  Data;
-    UPROPERTY(BlueprintReadWrite) FEclassDelta Delta;
-    UPROPERTY(BlueprintReadWrite) bool  bResetDoneToday = false;
-    UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Login")
+    bool bLoginSuccess = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Login")
+    FString LoginMessage = "";
 };
 
 USTRUCT(BlueprintType)
@@ -141,9 +141,6 @@ class SSBG_SIM_API UEclassAPIHandler : public UBlueprintFunctionLibrary
 public:
     UFUNCTION(BlueprintCallable)
     static void Login(FString UserId, FOnLoginComplete OnComplete);
-
-    UFUNCTION(BlueprintCallable, Category = "API")
-    static void GetEclassData(FString UserId, FOnLoginComplete OnComplete);
 
     // ✅ 재화 정보만 조회 (블루프린트 연결 단순화)
     UFUNCTION(BlueprintCallable, Category = "API")

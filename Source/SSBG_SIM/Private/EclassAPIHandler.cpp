@@ -82,10 +82,6 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
     return Item;
 }
 
-// ================================================================
-// 1. Login
-// ================================================================
-
 void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -97,134 +93,45 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
     );
 
     Request->OnProcessRequestComplete().BindLambda(
-        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
             FLoginResult LoginResult;
 
+            // 1. 네트워크 통신 자체가 실패한 경우 예외 처리
             if (!bSuccess || !Res.IsValid())
             {
-                UE_LOG(LogTemp, Error, TEXT("[Login] Request Failed - Using Local Data"));
-                UEclassAPIHandler::LoadEclassData();
+                UE_LOG(LogTemp, Error, TEXT("[Login] Request Failed - Server Unreachable"));
                 LoginResult.bLoginSuccess = false;
-                LoginResult.LoginMessage = TEXT("서버 연결 실패");
-                LoginResult.Data = UEclassAPIHandler::CachedData;
+                LoginResult.LoginMessage = TEXT("서버 연결에 실패했습니다.");
                 OnComplete.ExecuteIfBound(LoginResult);
                 return;
             }
 
             TSharedPtr<FJsonObject> Root;
-            TSharedRef<TJsonReader<>> Reader =
-                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
 
-            if (FJsonSerializer::Deserialize(Reader, Root))
+            if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
             {
-                // 학번 검증 실패 처리
+                // 2. 서버가 보낸 'success' 필드 확인 (true / false)
                 bool bServerSuccess = false;
                 Root->TryGetBoolField(TEXT("success"), bServerSuccess);
-                if (!bServerSuccess)
-                {
-                    FString Message;
-                    Root->TryGetStringField(TEXT("message"), Message);
-                    UE_LOG(LogTemp, Warning, TEXT("[Login] Rejected: %s"), *Message);
-                    LoginResult.bLoginSuccess = false;
-                    LoginResult.LoginMessage = Message;
-                    OnComplete.ExecuteIfBound(LoginResult);
-                    return;
-                }
+                LoginResult.bLoginSuccess = bServerSuccess;
 
-                const TSharedPtr<FJsonObject>* UserObj;
-                if (Root->TryGetObjectField(TEXT("user"), UserObj))
-                {
-                    // ✅ 로그인 성공
-                    LoginResult.bLoginSuccess = true;
-                    LoginResult.Data = ParseUserJson(*UserObj);
-                    UEclassAPIHandler::ApplyAndCache(LoginResult.Data);
+                // 3. 서버가 보낸 'message' 필드 확인
+                Root->TryGetStringField(TEXT("message"), LoginResult.LoginMessage);
 
-                    UE_LOG(LogTemp, Log, TEXT("[Login] Synced. User: %s | AC: %d, EC: %d, IC: %d, EXP: %d"),
-                        *UserId,
-                        LoginResult.Data.AcademicCurrency,
-                        LoginResult.Data.ExtraCurrency,
-                        LoginResult.Data.IdleCurrency,
-                        LoginResult.Data.Exp);
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("[Login] 'user' field missing!"));
-                }
-
-                const TSharedPtr<FJsonObject>* DeltaObj;
-                if (Root->TryGetObjectField(TEXT("delta"), DeltaObj))
-                {
-                    int32 AC = 0, EC = 0, IC = 0, E = 0;
-                    (*DeltaObj)->TryGetNumberField(TEXT("academicCurrency"), AC);
-                    (*DeltaObj)->TryGetNumberField(TEXT("extraCurrency"), EC);
-                    (*DeltaObj)->TryGetNumberField(TEXT("idleCurrency"), IC);
-                    (*DeltaObj)->TryGetNumberField(TEXT("exp"), E);
-                    LoginResult.Delta.AcademicCurrency = AC;
-                    LoginResult.Delta.ExtraCurrency = EC;
-                    LoginResult.Delta.IdleCurrency = IC;
-                    LoginResult.Delta.Exp = E;
-                }
-
-                bool bHasChange = false;
-                Root->TryGetBoolField(TEXT("hasChange"), bHasChange);
-                LoginResult.Delta.bHasChange = bHasChange;
-
-                bool bResetDone = false;
-                int32 Seconds = 0;
-                Root->TryGetBoolField(TEXT("resetDoneToday"), bResetDone);
-                Root->TryGetNumberField(TEXT("secondsUntilReset"), Seconds);
-                LoginResult.bResetDoneToday = bResetDone;
-                LoginResult.SecondsUntilReset = Seconds;
-
-                UE_LOG(LogTemp, Log, TEXT("[Login] ResetDone: %s | SecondsUntilReset: %d"),
-                    bResetDone ? TEXT("true") : TEXT("false"), Seconds);
+                UE_LOG(LogTemp, Log, TEXT("[Login] Result: %s | Message: %s"),
+                    bServerSuccess ? TEXT("Success") : TEXT("Failed"), *LoginResult.LoginMessage);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("[Login] JSON Deserialization Failed"));
+                LoginResult.bLoginSuccess = false;
+                LoginResult.LoginMessage = TEXT("서버 응답 데이터 오류");
             }
 
+            // 4. 오직 success와 message만 담긴 가벼운 구조체를 블루프린트로 뱉어줍니다.
             OnComplete.ExecuteIfBound(LoginResult);
-        });
-
-    Request->ProcessRequest();
-}
-
-// ================================================================
-// 2. GetEclassData
-// ================================================================
-
-void UEclassAPIHandler::GetEclassData(FString UserId, FOnLoginComplete OnComplete)
-{
-    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
-    Request->SetURL(GAME_SERVER + TEXT("/user/") + UserId);
-    Request->SetVerb("GET");
-    Request->SetHeader("Content-Type", "application/json");
-
-    Request->OnProcessRequestComplete().BindLambda(
-        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
-        {
-            FLoginResult Result;
-
-            if (!bSuccess || !Res.IsValid())
-            {
-                UE_LOG(LogTemp, Error, TEXT("[GetEclassData] Request Failed"));
-                OnComplete.ExecuteIfBound(Result);
-                return;
-            }
-
-            TSharedPtr<FJsonObject> Root;
-            TSharedRef<TJsonReader<>> Reader =
-                TJsonReaderFactory<>::Create(Res->GetContentAsString());
-
-            if (FJsonSerializer::Deserialize(Reader, Root))
-            {
-                const TSharedPtr<FJsonObject>* UserObj;
-                if (Root->TryGetObjectField(TEXT("user"), UserObj))
-                {
-                    Result.Data = ParseUserJson(*UserObj);
-                    UEclassAPIHandler::ApplyAndCache(Result.Data);
-                }
-            }
-
-            OnComplete.ExecuteIfBound(Result);
         });
 
     Request->ProcessRequest();
