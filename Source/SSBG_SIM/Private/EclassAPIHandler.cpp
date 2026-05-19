@@ -135,6 +135,7 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
                 const TSharedPtr<FJsonObject>* UserObj;
                 if (Root->TryGetObjectField(TEXT("user"), UserObj))
                 {
+                    // ✅ 로그인 성공
                     LoginResult.bLoginSuccess = true;
                     LoginResult.Data = ParseUserJson(*UserObj);
                     UEclassAPIHandler::ApplyAndCache(LoginResult.Data);
@@ -227,6 +228,113 @@ void UEclassAPIHandler::GetEclassData(FString UserId, FOnLoginComplete OnComplet
         });
 
     Request->ProcessRequest();
+}
+
+// ================================================================
+// 2-1. GetUserCurrency - 재화 정보만 조회
+// ================================================================
+
+void UEclassAPIHandler::GetUserCurrency(FString UserId, FOnEclassDataReceived OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/user/") + UserId);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            FEclassData Data;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetUserCurrency] Request Failed"));
+                OnComplete.ExecuteIfBound(Data);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    Data = ParseUserJson(*UserObj);
+                    UEclassAPIHandler::ApplyAndCache(Data);
+                }
+            }
+
+            OnComplete.ExecuteIfBound(Data);
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
+// 2-2 ~ 2-5. 재화별 개별 조회
+// ================================================================
+
+// 공통 헬퍼: /user/:userId 호출 후 특정 필드만 콜백
+static void FetchSingleCurrency(FString UserId, FString FieldName, FOnCurrencyReceived OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(TEXT("http://134.185.100.53:3000/api/user/") + UserId);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, FieldName, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            int32 Value = 0;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[FetchCurrency] Request Failed - %s"), *FieldName);
+                OnComplete.ExecuteIfBound(Value);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    (*UserObj)->TryGetNumberField(*FieldName, Value);
+                }
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("[GetCurrency] %s | %s: %d"), *UserId, *FieldName, Value);
+            OnComplete.ExecuteIfBound(Value);
+        });
+
+    Request->ProcessRequest();
+}
+
+void UEclassAPIHandler::GetAcademicCurrency(FString UserId, FOnCurrencyReceived OnComplete)
+{
+    FetchSingleCurrency(UserId, TEXT("academicCurrency"), OnComplete);
+}
+
+void UEclassAPIHandler::GetExtraCurrency(FString UserId, FOnCurrencyReceived OnComplete)
+{
+    FetchSingleCurrency(UserId, TEXT("extraCurrency"), OnComplete);
+}
+
+void UEclassAPIHandler::GetIdleCurrency(FString UserId, FOnCurrencyReceived OnComplete)
+{
+    FetchSingleCurrency(UserId, TEXT("idleCurrency"), OnComplete);
+}
+
+void UEclassAPIHandler::GetExp(FString UserId, FOnCurrencyReceived OnComplete)
+{
+    FetchSingleCurrency(UserId, TEXT("exp"), OnComplete);
 }
 
 // ================================================================
@@ -722,7 +830,7 @@ void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FO
 }
 
 // ================================================================
-// 13. GetUnlockedItemCodes - 해금된 itemCode 목록만 조회
+// 13. GetUnlockedItemCodes
 // ================================================================
 
 void UEclassAPIHandler::GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete)

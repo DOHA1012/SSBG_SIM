@@ -4,6 +4,10 @@
 #include "Interfaces/IHttpRequest.h"
 #include "EclassAPIHandler.generated.h"
 
+// ================================================================
+// 재화 구조체
+// ================================================================
+
 USTRUCT(BlueprintType)
 struct FEclassData
 {
@@ -30,8 +34,8 @@ USTRUCT(BlueprintType)
 struct FLoginResult
 {
     GENERATED_BODY()
-    UPROPERTY(BlueprintReadWrite) bool        bLoginSuccess = false;   // 로그인 성공 여부
-    UPROPERTY(BlueprintReadWrite) FString     LoginMessage;            // 실패 시 메시지
+    UPROPERTY(BlueprintReadWrite) bool        bLoginSuccess = false;  // 로그인 성공 여부
+    UPROPERTY(BlueprintReadWrite) FString     LoginMessage;           // 실패 시 메시지
     UPROPERTY(BlueprintReadWrite) FEclassData  Data;
     UPROPERTY(BlueprintReadWrite) FEclassDelta Delta;
     UPROPERTY(BlueprintReadWrite) bool  bResetDoneToday = false;
@@ -49,6 +53,10 @@ struct FServerTime
     UPROPERTY(BlueprintReadWrite) int32 SecondsUntilReset = 0;
 };
 
+// ================================================================
+// 학사 로그 구조체
+// ================================================================
+
 USTRUCT(BlueprintType)
 struct FAcademicLogEntry
 {
@@ -60,6 +68,11 @@ struct FAcademicLogEntry
     UPROPERTY(BlueprintReadWrite) int32   DeltaExp = 0;
     UPROPERTY(BlueprintReadWrite) FString CreatedAt;
 };
+
+// ================================================================
+// 아이템 구조체
+// ItemType: "Hat"|"Bag"|"Clothes"|"Theme"|"Friend"|"Consumable"|"relic"
+// ================================================================
 
 USTRUCT(BlueprintType)
 struct FEclassItemOptionInfo
@@ -113,8 +126,9 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived, const TArray<FAcademic
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived, const TArray<FEclassItemInfo>&, Items);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived, const TArray<FEclassCollectionEntry>&, Entries);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult, bool, bSuccess);
-// 해금된 itemCode 배열 반환용
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUnlockedCodesReceived, const TArray<FString>&, ItemCodes);
+// ✅ 재화 단일 값 반환용
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCurrencyReceived, int32, Value);
 
 // ================================================================
 // 클래스
@@ -130,6 +144,23 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "API")
     static void GetEclassData(FString UserId, FOnLoginComplete OnComplete);
+
+    // ✅ 재화 정보만 조회 (블루프린트 연결 단순화)
+    UFUNCTION(BlueprintCallable, Category = "API")
+    static void GetUserCurrency(FString UserId, FOnEclassDataReceived OnComplete);
+
+    // ✅ 재화별 개별 조회
+    UFUNCTION(BlueprintCallable, Category = "API|Currency")
+    static void GetAcademicCurrency(FString UserId, FOnCurrencyReceived OnComplete);
+
+    UFUNCTION(BlueprintCallable, Category = "API|Currency")
+    static void GetExtraCurrency(FString UserId, FOnCurrencyReceived OnComplete);
+
+    UFUNCTION(BlueprintCallable, Category = "API|Currency")
+    static void GetIdleCurrency(FString UserId, FOnCurrencyReceived OnComplete);
+
+    UFUNCTION(BlueprintCallable, Category = "API|Currency")
+    static void GetExp(FString UserId, FOnCurrencyReceived OnComplete);
 
     UFUNCTION(BlueprintCallable)
     static void RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete);
@@ -147,6 +178,7 @@ public:
     static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
 
     // 인벤토리
+    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete);
 
@@ -160,11 +192,11 @@ public:
     static void UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
 
     // 도감 전체 조회
+    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete);
 
     // 해금된 itemCode 목록만 조회 (엔진 아이템 테이블 비교용)
-    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete);
 
