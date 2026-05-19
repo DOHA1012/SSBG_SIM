@@ -30,17 +30,35 @@ struct FEclassDelta
     UPROPERTY(BlueprintReadWrite) bool  bHasChange = false;
 };
 
+// ================================================================
+// 로그인 결과 (성공 여부만)
+// ================================================================
+
 USTRUCT(BlueprintType)
 struct FLoginResult
 {
     GENERATED_BODY()
-
-    UPROPERTY(BlueprintReadOnly, Category = "Login")
-    bool bLoginSuccess = false;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Login")
-    FString LoginMessage = "";
+    UPROPERTY(BlueprintReadOnly, Category = "Login") bool    bLoginSuccess = false;
+    UPROPERTY(BlueprintReadOnly, Category = "Login") FString LoginMessage;
 };
+
+// ================================================================
+// 유저 세션 데이터 (로그인 후 호출)
+// 재화 변동량 + 리셋 정보
+// ================================================================
+
+USTRUCT(BlueprintType)
+struct FUserSessionData
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FEclassDelta Delta;
+    UPROPERTY(BlueprintReadWrite) bool         bResetDoneToday = false;
+    UPROPERTY(BlueprintReadWrite) int32        SecondsUntilReset = 0;
+};
+
+// ================================================================
+// 서버 시간
+// ================================================================
 
 USTRUCT(BlueprintType)
 struct FServerTime
@@ -71,7 +89,6 @@ struct FAcademicLogEntry
 
 // ================================================================
 // 아이템 구조체
-// ItemType: "Hat"|"Bag"|"Clothes"|"Theme"|"Friend"|"Consumable"|"relic"
 // ================================================================
 
 USTRUCT(BlueprintType)
@@ -117,18 +134,17 @@ struct FEclassCollectionEntry
 // ================================================================
 
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnLoginComplete, FLoginResult, Result);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUserSessionReceived, FUserSessionData, SessionData);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCurrencyReceived, int32, Value);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete, bool, bReadyForDreamShop);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived, FServerTime, ServerTime);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnGainCurrencyComplete, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived, const TArray<FAcademicLogEntry>&, Logs);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived, const TArray<FEclassItemInfo>&, Items);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived, const TArray<FEclassCollectionEntry>&, Entries);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUnlockedCodesReceived, const TArray<FString>&, ItemCodes);
-// ✅ 재화 단일 값 반환용
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCurrencyReceived, int32, Value);
 
 // ================================================================
 // 클래스
@@ -139,14 +155,19 @@ class SSBG_SIM_API UEclassAPIHandler : public UBlueprintFunctionLibrary
 {
     GENERATED_BODY()
 public:
-    UFUNCTION(BlueprintCallable)
+    // 로그인 - 학번 검증만 (성공/실패)
+    UFUNCTION(BlueprintCallable, Category = "API")
     static void Login(FString UserId, FOnLoginComplete OnComplete);
 
-    // ✅ 재화 정보만 조회 (블루프린트 연결 단순화)
+    // 로그인 성공 후 호출 - 델타 + 리셋 정보
     UFUNCTION(BlueprintCallable, Category = "API")
+    static void GetUserData(FString UserId, FOnUserSessionReceived OnComplete);
+
+    // 재화 전체 조회
+    UFUNCTION(BlueprintCallable, Category = "API|Currency")
     static void GetUserCurrency(FString UserId, FOnEclassDataReceived OnComplete);
 
-    // ✅ 재화별 개별 조회
+    // 재화별 개별 조회
     UFUNCTION(BlueprintCallable, Category = "API|Currency")
     static void GetAcademicCurrency(FString UserId, FOnCurrencyReceived OnComplete);
 
@@ -159,23 +180,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "API|Currency")
     static void GetExp(FString UserId, FOnCurrencyReceived OnComplete);
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category = "API")
     static void RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete);
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category = "API")
     static void SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete);
 
     UFUNCTION(BlueprintCallable, Category = "API")
     static void GainCurrency(FString UserId, int32 Amount, FString CurrencyType);
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category = "API")
     static void GetServerTime(FOnServerTimeReceived OnComplete);
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category = "API")
     static void GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete);
 
     // 인벤토리
-    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete);
 
@@ -188,19 +208,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
 
-    // 도감 전체 조회
-    // CollectionType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
+    // 도감
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete);
 
-    // 해금된 itemCode 목록만 조회 (엔진 아이템 테이블 비교용)
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete);
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category = "API")
     static void SaveEclassData();
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category = "API")
     static void LoadEclassData();
 
 private:

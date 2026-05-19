@@ -82,6 +82,10 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
     return Item;
 }
 
+// ================================================================
+// 1. Login - 학번 검증만 (성공/실패)
+// ================================================================
+
 void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -97,7 +101,6 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
         {
             FLoginResult LoginResult;
 
-            // 1. 네트워크 통신 자체가 실패한 경우 예외 처리
             if (!bSuccess || !Res.IsValid())
             {
                 UE_LOG(LogTemp, Error, TEXT("[Login] Request Failed - Server Unreachable"));
@@ -108,20 +111,19 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
             }
 
             TSharedPtr<FJsonObject> Root;
-            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
 
             if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
             {
-                // 2. 서버가 보낸 'success' 필드 확인 (true / false)
                 bool bServerSuccess = false;
                 Root->TryGetBoolField(TEXT("success"), bServerSuccess);
                 LoginResult.bLoginSuccess = bServerSuccess;
-
-                // 3. 서버가 보낸 'message' 필드 확인
                 Root->TryGetStringField(TEXT("message"), LoginResult.LoginMessage);
 
                 UE_LOG(LogTemp, Log, TEXT("[Login] Result: %s | Message: %s"),
-                    bServerSuccess ? TEXT("Success") : TEXT("Failed"), *LoginResult.LoginMessage);
+                    bServerSuccess ? TEXT("Success") : TEXT("Failed"),
+                    *LoginResult.LoginMessage);
             }
             else
             {
@@ -130,7 +132,6 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
                 LoginResult.LoginMessage = TEXT("서버 응답 데이터 오류");
             }
 
-            // 4. 오직 success와 message만 담긴 가벼운 구조체를 블루프린트로 뱉어줍니다.
             OnComplete.ExecuteIfBound(LoginResult);
         });
 
@@ -138,7 +139,82 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
 }
 
 // ================================================================
-// 2-1. GetUserCurrency - 재화 정보만 조회
+// 2. GetUserData - 로그인 성공 후 호출 (델타 + 리셋 정보)
+// ================================================================
+
+void UEclassAPIHandler::GetUserData(FString UserId, FOnUserSessionReceived OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/user/") + UserId);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            FUserSessionData SessionData;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetUserData] Request Failed"));
+                OnComplete.ExecuteIfBound(SessionData);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
+            {
+                // 재화 데이터 캐시 업데이트
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("user"), UserObj))
+                {
+                    UEclassAPIHandler::ApplyAndCache(ParseUserJson(*UserObj));
+                }
+
+                // 델타
+                const TSharedPtr<FJsonObject>* DeltaObj;
+                if (Root->TryGetObjectField(TEXT("delta"), DeltaObj))
+                {
+                    int32 AC = 0, EC = 0, IC = 0, E = 0;
+                    (*DeltaObj)->TryGetNumberField(TEXT("academicCurrency"), AC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("extraCurrency"), EC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("idleCurrency"), IC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("exp"), E);
+                    SessionData.Delta.AcademicCurrency = AC;
+                    SessionData.Delta.ExtraCurrency = EC;
+                    SessionData.Delta.IdleCurrency = IC;
+                    SessionData.Delta.Exp = E;
+                }
+
+                bool bHasChange = false;
+                Root->TryGetBoolField(TEXT("hasChange"), bHasChange);
+                SessionData.Delta.bHasChange = bHasChange;
+
+                // 리셋 정보
+                bool bResetDone = false;
+                int32 Seconds = 0;
+                Root->TryGetBoolField(TEXT("resetDoneToday"), bResetDone);
+                Root->TryGetNumberField(TEXT("secondsUntilReset"), Seconds);
+                SessionData.bResetDoneToday = bResetDone;
+                SessionData.SecondsUntilReset = Seconds;
+
+                UE_LOG(LogTemp, Log, TEXT("[GetUserData] %s | ResetDone: %s | SecondsUntilReset: %d"),
+                    *UserId,
+                    bResetDone ? TEXT("true") : TEXT("false"),
+                    Seconds);
+            }
+
+            OnComplete.ExecuteIfBound(SessionData);
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
+// 3. GetUserCurrency - 재화 전체 조회
 // ================================================================
 
 void UEclassAPIHandler::GetUserCurrency(FString UserId, FOnEclassDataReceived OnComplete)
@@ -181,10 +257,9 @@ void UEclassAPIHandler::GetUserCurrency(FString UserId, FOnEclassDataReceived On
 }
 
 // ================================================================
-// 2-2 ~ 2-5. 재화별 개별 조회
+// 4. 재화별 개별 조회
 // ================================================================
 
-// 공통 헬퍼: /user/:userId 호출 후 특정 필드만 콜백
 static void FetchSingleCurrency(FString UserId, FString FieldName, FOnCurrencyReceived OnComplete)
 {
     TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
@@ -245,7 +320,7 @@ void UEclassAPIHandler::GetExp(FString UserId, FOnCurrencyReceived OnComplete)
 }
 
 // ================================================================
-// 3. SpendCurrency
+// 5. SpendCurrency
 // ================================================================
 
 void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int32 Amount, FOnSpendGoldResult OnComplete)
@@ -283,8 +358,7 @@ void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int3
                     const TSharedPtr<FJsonObject>* UserObj;
                     if (Root->TryGetObjectField(TEXT("current"), UserObj))
                     {
-                        FEclassData Data = ParseUserJson(*UserObj);
-                        UEclassAPIHandler::ApplyAndCache(Data);
+                        UEclassAPIHandler::ApplyAndCache(ParseUserJson(*UserObj));
                     }
                 }
 
@@ -296,7 +370,7 @@ void UEclassAPIHandler::SpendCurrency(FString UserId, FString CurrencyType, int3
 }
 
 // ================================================================
-// 4. GainCurrency
+// 6. GainCurrency
 // ================================================================
 
 void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString CurrencyType)
@@ -316,17 +390,21 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
     Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
     Request->SetContentAsString(JsonString);
 
-    Request->OnProcessRequestComplete().BindLambda([UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+    Request->OnProcessRequestComplete().BindLambda(
+        [UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
         {
             if (bSuccess && Res.IsValid())
             {
                 TSharedPtr<FJsonObject> RootObj;
-                TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Res->GetContentAsString());
+                TSharedRef<TJsonReader<>> Reader =
+                    TJsonReaderFactory<>::Create(Res->GetContentAsString());
                 if (FJsonSerializer::Deserialize(Reader, RootObj))
                 {
-                    FEclassData NewSyncedData = ParseUserJson(RootObj->GetObjectField(TEXT("current")).ToSharedRef());
-                    ApplyAndCache(NewSyncedData);
-                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s - AC:%d"), *UserId, NewSyncedData.AcademicCurrency);
+                    FEclassData NewData = ParseUserJson(
+                        RootObj->GetObjectField(TEXT("current")).ToSharedRef());
+                    ApplyAndCache(NewData);
+                    UE_LOG(LogTemp, Log, TEXT("[GainCurrency] %s - AC:%d"),
+                        *UserId, NewData.AcademicCurrency);
                 }
             }
             else
@@ -339,7 +417,7 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
 }
 
 // ================================================================
-// 5. RequestDailyReset
+// 7. RequestDailyReset
 // ================================================================
 
 void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete OnComplete)
@@ -385,7 +463,7 @@ void UEclassAPIHandler::RequestDailyReset(FString UserId, FOnDailyResetComplete 
 }
 
 // ================================================================
-// 6. GetServerTime
+// 8. GetServerTime
 // ================================================================
 
 void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
@@ -434,7 +512,7 @@ void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
 }
 
 // ================================================================
-// 7. GetAcademicLog
+// 9. GetAcademicLog
 // ================================================================
 
 void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived OnComplete)
@@ -495,7 +573,7 @@ void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived On
 }
 
 // ================================================================
-// 8. GetInventory
+// 10. GetInventory
 // ================================================================
 
 void UEclassAPIHandler::GetInventory(FString UserId, FString ItemType, FOnInventoryReceived OnComplete)
@@ -546,7 +624,7 @@ void UEclassAPIHandler::GetInventory(FString UserId, FString ItemType, FOnInvent
 }
 
 // ================================================================
-// 9. GetEquippedItems
+// 11. GetEquippedItems
 // ================================================================
 
 void UEclassAPIHandler::GetEquippedItems(FString UserId, FOnInventoryReceived OnComplete)
@@ -592,7 +670,7 @@ void UEclassAPIHandler::GetEquippedItems(FString UserId, FOnInventoryReceived On
 }
 
 // ================================================================
-// 10. EquipItem
+// 12. EquipItem
 // ================================================================
 
 void UEclassAPIHandler::EquipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete)
@@ -633,7 +711,7 @@ void UEclassAPIHandler::EquipItem(FString UserId, FString ItemCode, FOnEquipResu
 }
 
 // ================================================================
-// 11. UnequipItem
+// 13. UnequipItem
 // ================================================================
 
 void UEclassAPIHandler::UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete)
@@ -674,7 +752,7 @@ void UEclassAPIHandler::UnequipItem(FString UserId, FString ItemCode, FOnEquipRe
 }
 
 // ================================================================
-// 12. GetCollection
+// 14. GetCollection
 // ================================================================
 
 void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FOnCollectionReceived OnComplete)
@@ -737,7 +815,7 @@ void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FO
 }
 
 // ================================================================
-// 13. GetUnlockedItemCodes
+// 15. GetUnlockedItemCodes
 // ================================================================
 
 void UEclassAPIHandler::GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete)
