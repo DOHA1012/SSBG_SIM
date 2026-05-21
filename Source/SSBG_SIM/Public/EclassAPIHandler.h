@@ -130,6 +130,24 @@ struct FEclassCollectionEntry
 };
 
 // ================================================================
+// 상점 구조체
+// ================================================================
+
+USTRUCT(BlueprintType)
+struct FShopItem
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FString ShopId;
+    UPROPERTY(BlueprintReadWrite) FString ItemCode;
+    UPROPERTY(BlueprintReadWrite) FString Name;
+    UPROPERTY(BlueprintReadWrite) FString Description;
+    UPROPERTY(BlueprintReadWrite) FString ItemType;
+    UPROPERTY(BlueprintReadWrite) FString CosmeticSlot;
+    UPROPERTY(BlueprintReadWrite) FString CurrencyType;  // "academicCurrency"|"extraCurrency"|"idleCurrency"
+    UPROPERTY(BlueprintReadWrite) int32   Price = 0;
+};
+
+// ================================================================
 // 델리게이트
 // ================================================================
 
@@ -145,6 +163,8 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived, const TArray<FEclassItem
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived, const TArray<FEclassCollectionEntry>&, Entries);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUnlockedCodesReceived, const TArray<FString>&, ItemCodes);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnShopReceived, const TArray<FShopItem>&, Items);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnBuyItemResult, bool, bSuccess);
 
 // ================================================================
 // 클래스
@@ -214,6 +234,14 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "API|Collection")
     static void GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete);
+
+    // 상점
+    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
+    UFUNCTION(BlueprintCallable, Category = "API|Shop")
+    static void GetShop(FString ItemType, FOnShopReceived OnComplete);
+
+    UFUNCTION(BlueprintCallable, Category = "API|Shop")
+    static void BuyItem(FString UserId, FString ShopId, FOnBuyItemResult OnComplete);
 
     UFUNCTION(BlueprintCallable, Category = "API")
     static void SaveEclassData();

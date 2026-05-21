@@ -866,6 +866,135 @@ void UEclassAPIHandler::GetUnlockedItemCodes(FString UserId, FString CollectionT
 }
 
 // ================================================================
+// 16. GetShop
+// ItemType: "" = 전체 / "Hat" / "Bag" / ...
+// ================================================================
+
+void UEclassAPIHandler::GetShop(FString ItemType, FOnShopReceived OnComplete)
+{
+    FString URL = ItemType.IsEmpty()
+        ? GAME_SERVER + TEXT("/shop")
+        : GAME_SERVER + TEXT("/shop?type=") + ItemType;
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(URL);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, ItemType](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            TArray<FShopItem> Items;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetShop] Request Failed"));
+                OnComplete.ExecuteIfBound(Items);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                const TArray<TSharedPtr<FJsonValue>>* ItemArray;
+                if (Root->TryGetArrayField(TEXT("items"), ItemArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& Val : *ItemArray)
+                    {
+                        const TSharedPtr<FJsonObject>& Obj = Val->AsObject();
+                        if (!Obj.IsValid()) continue;
+
+                        FShopItem Item;
+                        int32 Price = 0;
+                        Obj->TryGetStringField(TEXT("shopId"), Item.ShopId);
+                        Obj->TryGetStringField(TEXT("itemCode"), Item.ItemCode);
+                        Obj->TryGetStringField(TEXT("name"), Item.Name);
+                        Obj->TryGetStringField(TEXT("description"), Item.Description);
+                        Obj->TryGetStringField(TEXT("itemType"), Item.ItemType);
+                        Obj->TryGetStringField(TEXT("cosmeticSlot"), Item.CosmeticSlot);
+                        Obj->TryGetStringField(TEXT("currencyType"), Item.CurrencyType);
+                        Obj->TryGetNumberField(TEXT("price"), Price);
+                        Item.Price = Price;
+
+                        Items.Add(Item);
+                    }
+                }
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("[GetShop] Type:%s | %d items"),
+                ItemType.IsEmpty() ? TEXT("All") : *ItemType, Items.Num());
+            OnComplete.ExecuteIfBound(Items);
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
+// 17. BuyItem
+// ================================================================
+
+void UEclassAPIHandler::BuyItem(FString UserId, FString ShopId, FOnBuyItemResult OnComplete)
+{
+    TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
+    JsonObj->SetStringField(TEXT("userId"), UserId);
+    JsonObj->SetStringField(TEXT("shopId"), ShopId);
+
+    FString JsonString;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+    FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/shop/buy"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(JsonString);
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, ShopId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[BuyItem] Request Failed"));
+                OnComplete.ExecuteIfBound(false);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bOk = false;
+                FString Message;
+                Root->TryGetBoolField(TEXT("success"), bOk);
+                Root->TryGetStringField(TEXT("message"), Message);
+
+                // 구매 후 캐시 업데이트
+                if (bOk)
+                {
+                    const TSharedPtr<FJsonObject>* UserObj;
+                    if (Root->TryGetObjectField(TEXT("current"), UserObj))
+                    {
+                        UEclassAPIHandler::ApplyAndCache(ParseUserJson(*UserObj));
+                    }
+                }
+
+                UE_LOG(LogTemp, Log, TEXT("[BuyItem] ShopId:%s | %s | %s"),
+                    *ShopId,
+                    bOk ? TEXT("Success") : TEXT("Failed"),
+                    *Message);
+                OnComplete.ExecuteIfBound(bOk);
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
 // 캐시
 // ================================================================
 
