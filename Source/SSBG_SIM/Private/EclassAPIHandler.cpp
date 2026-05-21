@@ -794,7 +794,7 @@ void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FO
 
                         FEclassCollectionEntry Entry;
                         bool bUnlocked = false;
-                        Obj->TryGetStringField(TEXT("collectionCode"), Entry.CollectionCode);
+                        Obj->TryGetStringField(TEXT("itemCode"), Entry.CollectionCode);
                         Obj->TryGetStringField(TEXT("name"), Entry.Name);
                         Obj->TryGetStringField(TEXT("description"), Entry.Description);
                         Obj->TryGetStringField(TEXT("collectionType"), Entry.CollectionType);
