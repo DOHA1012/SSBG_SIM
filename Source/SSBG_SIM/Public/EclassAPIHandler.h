@@ -151,21 +151,22 @@ struct FShopItem
 // 델리게이트
 // ================================================================
 
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnLoginComplete,         FLoginResult,                         Result);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUserSessionReceived,   FUserSessionData,                     SessionData);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived,    FEclassData,                          Data);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCurrencyReceived,      int32,                                Value);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult,       bool,                                 bSuccess);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete,    bool,                                 bReadyForDreamShop);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived,    FServerTime,                          ServerTime);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived,   const TArray<FAcademicLogEntry>&,      Logs);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived,     const TArray<FEclassItemInfo>&,        Items);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived,    const TArray<FEclassCollectionEntry>&, Entries);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult,           bool,                                 bSuccess);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUnlockedCodesReceived, const TArray<FString>&,               ItemCodes);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnShopReceived,          const TArray<FShopItem>&,             Items);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnBuyItemResult,         bool,                                 bSuccess);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCraftItemResult,       bool,                                 bSuccess);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnLoginComplete, FLoginResult, Result);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUserSessionReceived, FUserSessionData, SessionData);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEclassDataReceived, FEclassData, Data);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCurrencyReceived, int32, Value);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnSpendGoldResult, bool, bSuccess);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDailyResetComplete, bool, bReadyForDreamShop);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnServerTimeReceived, FServerTime, ServerTime);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnAcademicLogReceived, const TArray<FAcademicLogEntry>&, Logs);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnInventoryReceived, const TArray<FEclassItemInfo>&, Items);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCollectionReceived, const TArray<FEclassCollectionEntry>&, Entries);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnEquipResult, bool, bSuccess);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnUnlockedCodesReceived, const TArray<FString>&, ItemCodes);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnShopReceived, const TArray<FShopItem>&, Items);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnBuyItemResult, bool, bSuccess);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCraftItemResult, bool, bSuccess);
+DECLARE_DYNAMIC_DELEGATE_TwoParams(FOnFindRecipeResult, bool, bSuccess, FString, CraftId);
 
 // ================================================================
 // 클래스
@@ -247,6 +248,10 @@ public:
     // 제작
     UFUNCTION(BlueprintCallable, Category = "API|Craft")
     static void CraftItem(FString UserId, FString CraftId, FOnCraftItemResult OnComplete);
+
+    // 재화 조합으로 레시피 찾기 (사용 안 하는 재화는 0으로)
+    UFUNCTION(BlueprintCallable, Category = "API|Craft")
+    static void FindRecipe(int32 Academic, int32 Extra, int32 Idle, FOnFindRecipeResult OnComplete);
 
     UFUNCTION(BlueprintCallable, Category = "API")
     static void SaveEclassData();

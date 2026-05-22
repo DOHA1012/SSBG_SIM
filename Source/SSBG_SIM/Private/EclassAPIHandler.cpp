@@ -33,9 +33,9 @@ static FEclassData ParseUserJson(TSharedPtr<FJsonObject> UserObj)
     UserObj->TryGetNumberField(TEXT("exp"), E);
 
     Result.AcademicCurrency = AC;
-    Result.ExtraCurrency    = EC;
-    Result.IdleCurrency     = IC;
-    Result.Exp              = E;
+    Result.ExtraCurrency = EC;
+    Result.IdleCurrency = IC;
+    Result.Exp = E;
     return Result;
 }
 
@@ -46,16 +46,16 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
 
     int32 SlotIndex = 0;
     bool bEquipped = false;
-    Obj->TryGetStringField(TEXT("itemCode"),     Item.ItemCode);
-    Obj->TryGetStringField(TEXT("name"),         Item.Name);
-    Obj->TryGetStringField(TEXT("description"),  Item.Description);
-    Obj->TryGetStringField(TEXT("itemType"),     Item.ItemType);
+    Obj->TryGetStringField(TEXT("itemCode"), Item.ItemCode);
+    Obj->TryGetStringField(TEXT("name"), Item.Name);
+    Obj->TryGetStringField(TEXT("description"), Item.Description);
+    Obj->TryGetStringField(TEXT("itemType"), Item.ItemType);
     Obj->TryGetStringField(TEXT("cosmeticSlot"), Item.CosmeticSlot);
-    Obj->TryGetStringField(TEXT("obtainedAt"),   Item.ObtainedAt);
-    Obj->TryGetNumberField(TEXT("slotIndex"),    SlotIndex);
-    Obj->TryGetBoolField  (TEXT("isEquipped"),   bEquipped);
+    Obj->TryGetStringField(TEXT("obtainedAt"), Item.ObtainedAt);
+    Obj->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
+    Obj->TryGetBoolField(TEXT("isEquipped"), bEquipped);
 
-    Item.SlotIndex   = SlotIndex;
+    Item.SlotIndex = SlotIndex;
     Item.bIsEquipped = bEquipped;
 
     const TArray<TSharedPtr<FJsonValue>>* OptionsArr;
@@ -68,11 +68,11 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
 
             FEclassItemOptionInfo Opt;
             double Value = 1.0;
-            OptObj->TryGetStringField(TEXT("optionCode"),  Opt.OptionCode);
-            OptObj->TryGetStringField(TEXT("name"),        Opt.Name);
+            OptObj->TryGetStringField(TEXT("optionCode"), Opt.OptionCode);
+            OptObj->TryGetStringField(TEXT("name"), Opt.Name);
             OptObj->TryGetStringField(TEXT("description"), Opt.Description);
-            OptObj->TryGetStringField(TEXT("valueType"),   Opt.ValueType);
-            OptObj->TryGetNumberField(TEXT("value"),       Value);
+            OptObj->TryGetStringField(TEXT("valueType"), Opt.ValueType);
+            OptObj->TryGetNumberField(TEXT("value"), Value);
             Opt.Value = (float)Value;
 
             Item.Options.Add(Opt);
@@ -105,7 +105,7 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
             {
                 UE_LOG(LogTemp, Error, TEXT("[Login] Request Failed - Server Unreachable"));
                 LoginResult.bLoginSuccess = false;
-                LoginResult.LoginMessage  = TEXT("서버 연결에 실패했습니다.");
+                LoginResult.LoginMessage = TEXT("서버 연결에 실패했습니다.");
                 OnComplete.ExecuteIfBound(LoginResult);
                 return;
             }
@@ -129,7 +129,7 @@ void UEclassAPIHandler::Login(FString UserId, FOnLoginComplete OnComplete)
             {
                 UE_LOG(LogTemp, Error, TEXT("[Login] JSON Deserialization Failed"));
                 LoginResult.bLoginSuccess = false;
-                LoginResult.LoginMessage  = TEXT("서버 응답 데이터 오류");
+                LoginResult.LoginMessage = TEXT("서버 응답 데이터 오류");
             }
 
             OnComplete.ExecuteIfBound(LoginResult);
@@ -180,13 +180,13 @@ void UEclassAPIHandler::GetUserData(FString UserId, FOnUserSessionReceived OnCom
                 {
                     int32 AC = 0, EC = 0, IC = 0, E = 0;
                     (*DeltaObj)->TryGetNumberField(TEXT("academicCurrency"), AC);
-                    (*DeltaObj)->TryGetNumberField(TEXT("extraCurrency"),    EC);
-                    (*DeltaObj)->TryGetNumberField(TEXT("idleCurrency"),     IC);
-                    (*DeltaObj)->TryGetNumberField(TEXT("exp"),              E);
+                    (*DeltaObj)->TryGetNumberField(TEXT("extraCurrency"), EC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("idleCurrency"), IC);
+                    (*DeltaObj)->TryGetNumberField(TEXT("exp"), E);
                     SessionData.Delta.AcademicCurrency = AC;
-                    SessionData.Delta.ExtraCurrency    = EC;
-                    SessionData.Delta.IdleCurrency     = IC;
-                    SessionData.Delta.Exp              = E;
+                    SessionData.Delta.ExtraCurrency = EC;
+                    SessionData.Delta.IdleCurrency = IC;
+                    SessionData.Delta.Exp = E;
                 }
 
                 bool bHasChange = false;
@@ -196,10 +196,10 @@ void UEclassAPIHandler::GetUserData(FString UserId, FOnUserSessionReceived OnCom
                 // 리셋 정보
                 bool bResetDone = false;
                 int32 Seconds = 0;
-                Root->TryGetBoolField(TEXT("resetDoneToday"),    bResetDone);
+                Root->TryGetBoolField(TEXT("resetDoneToday"), bResetDone);
                 Root->TryGetNumberField(TEXT("secondsUntilReset"), Seconds);
-                SessionData.bResetDoneToday    = bResetDone;
-                SessionData.SecondsUntilReset  = Seconds;
+                SessionData.bResetDoneToday = bResetDone;
+                SessionData.SecondsUntilReset = Seconds;
 
                 UE_LOG(LogTemp, Log, TEXT("[GetUserData] %s | ResetDone: %s | SecondsUntilReset: %d"),
                     *UserId,
@@ -492,16 +492,16 @@ void UEclassAPIHandler::GetServerTime(FOnServerTimeReceived OnComplete)
             if (FJsonSerializer::Deserialize(Reader, Root))
             {
                 int32 Hour = 0, Day = 0, Month = 0, Year = 0, Seconds = 0;
-                Root->TryGetNumberField(TEXT("utcHour"),           Hour);
-                Root->TryGetNumberField(TEXT("utcDay"),            Day);
-                Root->TryGetNumberField(TEXT("utcMonth"),          Month);
-                Root->TryGetNumberField(TEXT("utcYear"),           Year);
+                Root->TryGetNumberField(TEXT("utcHour"), Hour);
+                Root->TryGetNumberField(TEXT("utcDay"), Day);
+                Root->TryGetNumberField(TEXT("utcMonth"), Month);
+                Root->TryGetNumberField(TEXT("utcYear"), Year);
                 Root->TryGetNumberField(TEXT("secondsUntilReset"), Seconds);
 
-                ServerTime.UtcHour           = Hour;
-                ServerTime.UtcDay            = Day;
-                ServerTime.UtcMonth          = Month;
-                ServerTime.UtcYear           = Year;
+                ServerTime.UtcHour = Hour;
+                ServerTime.UtcDay = Day;
+                ServerTime.UtcMonth = Month;
+                ServerTime.UtcYear = Year;
                 ServerTime.SecondsUntilReset = Seconds;
             }
 
@@ -550,16 +550,16 @@ void UEclassAPIHandler::GetAcademicLog(FString UserId, FOnAcademicLogReceived On
 
                         FAcademicLogEntry Entry;
                         int32 Id = 0, DeltaExtra = 0, DeltaExp = 0;
-                        Obj->TryGetNumberField(TEXT("id"),         Id);
+                        Obj->TryGetNumberField(TEXT("id"), Id);
                         Obj->TryGetNumberField(TEXT("deltaExtra"), DeltaExtra);
-                        Obj->TryGetNumberField(TEXT("deltaExp"),   DeltaExp);
+                        Obj->TryGetNumberField(TEXT("deltaExp"), DeltaExp);
                         Obj->TryGetStringField(TEXT("changeType"), Entry.ChangeType);
-                        Obj->TryGetStringField(TEXT("detail"),     Entry.Detail);
-                        Obj->TryGetStringField(TEXT("createdAt"),  Entry.CreatedAt);
+                        Obj->TryGetStringField(TEXT("detail"), Entry.Detail);
+                        Obj->TryGetStringField(TEXT("createdAt"), Entry.CreatedAt);
 
-                        Entry.Id         = Id;
+                        Entry.Id = Id;
                         Entry.DeltaExtra = DeltaExtra;
-                        Entry.DeltaExp   = DeltaExp;
+                        Entry.DeltaExp = DeltaExp;
                         Logs.Add(Entry);
                     }
                 }
@@ -794,12 +794,12 @@ void UEclassAPIHandler::GetCollection(FString UserId, FString CollectionType, FO
 
                         FEclassCollectionEntry Entry;
                         bool bUnlocked = false;
-                        Obj->TryGetStringField(TEXT("itemCode"),       Entry.CollectionCode);
-                        Obj->TryGetStringField(TEXT("name"),           Entry.Name);
-                        Obj->TryGetStringField(TEXT("description"),    Entry.Description);
+                        Obj->TryGetStringField(TEXT("itemCode"), Entry.CollectionCode);
+                        Obj->TryGetStringField(TEXT("name"), Entry.Name);
+                        Obj->TryGetStringField(TEXT("description"), Entry.Description);
                         Obj->TryGetStringField(TEXT("collectionType"), Entry.CollectionType);
-                        Obj->TryGetStringField(TEXT("unlockedAt"),     Entry.UnlockedAt);
-                        Obj->TryGetBoolField  (TEXT("isUnlocked"),     bUnlocked);
+                        Obj->TryGetStringField(TEXT("unlockedAt"), Entry.UnlockedAt);
+                        Obj->TryGetBoolField(TEXT("isUnlocked"), bUnlocked);
                         Entry.bIsUnlocked = bUnlocked;
 
                         Entries.Add(Entry);
@@ -909,14 +909,14 @@ void UEclassAPIHandler::GetShop(FString ItemType, FOnShopReceived OnComplete)
 
                         FShopItem Item;
                         int32 Price = 0;
-                        Obj->TryGetStringField(TEXT("shopId"),      Item.ShopId);
-                        Obj->TryGetStringField(TEXT("itemCode"),     Item.ItemCode);
-                        Obj->TryGetStringField(TEXT("name"),         Item.Name);
-                        Obj->TryGetStringField(TEXT("description"),  Item.Description);
-                        Obj->TryGetStringField(TEXT("itemType"),     Item.ItemType);
+                        Obj->TryGetStringField(TEXT("shopId"), Item.ShopId);
+                        Obj->TryGetStringField(TEXT("itemCode"), Item.ItemCode);
+                        Obj->TryGetStringField(TEXT("name"), Item.Name);
+                        Obj->TryGetStringField(TEXT("description"), Item.Description);
+                        Obj->TryGetStringField(TEXT("itemType"), Item.ItemType);
                         Obj->TryGetStringField(TEXT("cosmeticSlot"), Item.CosmeticSlot);
                         Obj->TryGetStringField(TEXT("currencyType"), Item.CurrencyType);
-                        Obj->TryGetNumberField(TEXT("price"),        Price);
+                        Obj->TryGetNumberField(TEXT("price"), Price);
                         Item.Price = Price;
 
                         Items.Add(Item);
@@ -1001,7 +1001,7 @@ void UEclassAPIHandler::BuyItem(FString UserId, FString ShopId, FOnBuyItemResult
 void UEclassAPIHandler::CraftItem(FString UserId, FString CraftId, FOnCraftItemResult OnComplete)
 {
     TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
-    JsonObj->SetStringField(TEXT("userId"),  UserId);
+    JsonObj->SetStringField(TEXT("userId"), UserId);
     JsonObj->SetStringField(TEXT("craftId"), CraftId);
 
     FString JsonString;
@@ -1057,6 +1057,59 @@ void UEclassAPIHandler::CraftItem(FString UserId, FString CraftId, FOnCraftItemR
 }
 
 // ================================================================
+// 19. FindRecipe - 재화 조합으로 레시피 찾기
+// ================================================================
+
+void UEclassAPIHandler::FindRecipe(int32 Academic, int32 Extra, int32 Idle, FOnFindRecipeResult OnComplete)
+{
+    TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
+    JsonObj->SetNumberField(TEXT("academic"), Academic);
+    JsonObj->SetNumberField(TEXT("extra"), Extra);
+    JsonObj->SetNumberField(TEXT("idle"), Idle);
+
+    FString JsonString;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+    FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/craft/find"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(JsonString);
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[FindRecipe] Request Failed"));
+                OnComplete.ExecuteIfBound(false, TEXT(""));
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bOk = false;
+                FString CraftId;
+                FString Message;
+                Root->TryGetBoolField(TEXT("success"), bOk);
+                Root->TryGetStringField(TEXT("craftId"), CraftId);
+                Root->TryGetStringField(TEXT("message"), Message);
+
+                UE_LOG(LogTemp, Log, TEXT("[FindRecipe] %s | CraftId: %s"),
+                    bOk ? TEXT("Found") : *Message, *CraftId);
+                OnComplete.ExecuteIfBound(bOk, CraftId);
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
 // 캐시
 // ================================================================
 
@@ -1079,11 +1132,11 @@ void UEclassAPIHandler::SaveEclassData()
         UGameplayStatics::CreateSaveGameObject(UEclassSaveGame::StaticClass()));
     if (Save)
     {
-        Save->StudentId        = CachedData.StudentId;
+        Save->StudentId = CachedData.StudentId;
         Save->AcademicCurrency = CachedData.AcademicCurrency;
-        Save->ExtraCurrency    = CachedData.ExtraCurrency;
-        Save->IdleCurrency     = CachedData.IdleCurrency;
-        Save->Exp              = CachedData.Exp;
+        Save->ExtraCurrency = CachedData.ExtraCurrency;
+        Save->IdleCurrency = CachedData.IdleCurrency;
+        Save->Exp = CachedData.Exp;
         UGameplayStatics::SaveGameToSlot(Save, TEXT("EclassSlot"), 0);
     }
 }
@@ -1096,11 +1149,11 @@ void UEclassAPIHandler::LoadEclassData()
             UGameplayStatics::LoadGameFromSlot(TEXT("EclassSlot"), 0));
         if (Load)
         {
-            CachedData.StudentId        = Load->StudentId;
+            CachedData.StudentId = Load->StudentId;
             CachedData.AcademicCurrency = Load->AcademicCurrency;
-            CachedData.ExtraCurrency    = Load->ExtraCurrency;
-            CachedData.IdleCurrency     = Load->IdleCurrency;
-            CachedData.Exp              = Load->Exp;
+            CachedData.ExtraCurrency = Load->ExtraCurrency;
+            CachedData.IdleCurrency = Load->IdleCurrency;
+            CachedData.Exp = Load->Exp;
         }
     }
 }
