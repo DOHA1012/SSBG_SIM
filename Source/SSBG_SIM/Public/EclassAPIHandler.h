@@ -227,6 +227,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void EquipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
 
+    // Consumable 전용 장착 (최대 3개, 초과 시 가장 왼쪽 해제)
+    UFUNCTION(BlueprintCallable, Category = "API|Inventory")
+    static void EquipConsumable(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
+
     UFUNCTION(BlueprintCallable, Category = "API|Inventory")
     static void UnequipItem(FString UserId, FString ItemCode, FOnEquipResult OnComplete);
 

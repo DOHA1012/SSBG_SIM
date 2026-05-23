@@ -1057,6 +1057,52 @@ void UEclassAPIHandler::CraftItem(FString UserId, FString CraftId, FOnCraftItemR
 }
 
 // ================================================================
+// EquipConsumable - Consumable 전용 장착
+// ================================================================
+
+void UEclassAPIHandler::EquipConsumable(FString UserId, FString ItemCode, FOnEquipResult OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/inventory/equip-consumable"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(
+        FString::Printf(TEXT("{\"userId\":\"%s\",\"itemCode\":\"%s\"}"), *UserId, *ItemCode)
+    );
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, ItemCode](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[EquipConsumable] Request Failed"));
+                OnComplete.ExecuteIfBound(false);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bOk = false;
+                FString Unequipped;
+                Root->TryGetBoolField(TEXT("success"), bOk);
+                Root->TryGetStringField(TEXT("unequipped"), Unequipped);
+
+                UE_LOG(LogTemp, Log, TEXT("[EquipConsumable] %s - %s | Unequipped: %s"),
+                    *ItemCode,
+                    bOk ? TEXT("Success") : TEXT("Failed"),
+                    Unequipped.IsEmpty() ? TEXT("None") : *Unequipped);
+                OnComplete.ExecuteIfBound(bOk);
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
 // 19. FindRecipe - 재화 조합으로 레시피 찾기
 // ================================================================
 
