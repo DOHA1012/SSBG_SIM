@@ -242,7 +242,7 @@ public:
     static void GetUnlockedItemCodes(FString UserId, FString CollectionType, FOnUnlockedCodesReceived OnComplete);
 
     // 상점
-    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable" / "relic"
+    // ItemType: "" = 전체 / "Hat" / "Bag" / "Clothes" / "Theme" / "Friend" / "Consumable"
     UFUNCTION(BlueprintCallable, Category = "API|Shop")
     static void GetShop(FString ItemType, FOnShopReceived OnComplete);
 
