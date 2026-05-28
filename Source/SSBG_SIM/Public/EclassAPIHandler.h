@@ -130,8 +130,39 @@ struct FEclassCollectionEntry
 };
 
 // ================================================================
-// 상점 구조체
+// 꿈상점 구조체
 // ================================================================
+
+USTRUCT(BlueprintType)
+struct FDreamShopOption
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FString OptionCode;
+    UPROPERTY(BlueprintReadWrite) FString Grade;
+    UPROPERTY(BlueprintReadWrite) float   Value = 1.0f;
+};
+
+USTRUCT(BlueprintType)
+struct FDreamShopItem
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) FString ItemCode;
+    UPROPERTY(BlueprintReadWrite) FString Grade;        // basic/low/mid/high/top
+    UPROPERTY(BlueprintReadWrite) float   Multiplier = 1.0f;
+    UPROPERTY(BlueprintReadWrite) TArray<FDreamShopOption> Options;
+    UPROPERTY(BlueprintReadWrite) bool    bBought = false;
+};
+
+USTRUCT(BlueprintType)
+struct FDreamShopResult
+{
+    GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) bool                    bSuccess = false;
+    UPROPERTY(BlueprintReadWrite) FString                 Message;
+    UPROPERTY(BlueprintReadWrite) TArray<FDreamShopItem>  Items;
+    UPROPERTY(BlueprintReadWrite) int32                   MaxBuyCount = 1;
+    UPROPERTY(BlueprintReadWrite) int32                   UsedBuyCount = 0;
+};
 
 USTRUCT(BlueprintType)
 struct FShopItem
@@ -167,6 +198,8 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnShopReceived, const TArray<FShopItem>&, Ite
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnBuyItemResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FOnCraftItemResult, bool, bSuccess);
 DECLARE_DYNAMIC_DELEGATE_TwoParams(FOnFindRecipeResult, bool, bSuccess, FString, CraftId);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDreamShopReceived, FDreamShopResult, Result);
+DECLARE_DYNAMIC_DELEGATE_OneParam(FOnDreamShopBuyResult, bool, bSuccess);
 
 // ================================================================
 // 클래스
@@ -248,6 +281,14 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "API|Shop")
     static void BuyItem(FString UserId, FString ShopId, FOnBuyItemResult OnComplete);
+
+    // 꿈상점
+    UFUNCTION(BlueprintCallable, Category = "API|DreamShop")
+    static void GetDreamShop(FString UserId, FOnDreamShopReceived OnComplete);
+
+    // itemIndex: 0부터 시작
+    UFUNCTION(BlueprintCallable, Category = "API|DreamShop")
+    static void BuyDreamShopItem(FString UserId, int32 ItemIndex, FOnDreamShopBuyResult OnComplete);
 
     // 제작
     UFUNCTION(BlueprintCallable, Category = "API|Craft")

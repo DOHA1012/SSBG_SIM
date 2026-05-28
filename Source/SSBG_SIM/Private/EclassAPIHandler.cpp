@@ -1057,6 +1057,153 @@ void UEclassAPIHandler::CraftItem(FString UserId, FString CraftId, FOnCraftItemR
 }
 
 // ================================================================
+// GetDreamShop
+// ================================================================
+
+void UEclassAPIHandler::GetDreamShop(FString UserId, FOnDreamShopReceived OnComplete)
+{
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/dream-shop/") + UserId);
+    Request->SetVerb("GET");
+    Request->SetHeader("Content-Type", "application/json");
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            FDreamShopResult Result;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[GetDreamShop] Request Failed"));
+                OnComplete.ExecuteIfBound(Result);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid())
+            {
+                bool bOk = false;
+                Root->TryGetBoolField(TEXT("success"), bOk);
+                Root->TryGetStringField(TEXT("message"), Result.Message);
+                Result.bSuccess = bOk;
+
+                if (bOk)
+                {
+                    int32 MaxBuy = 1, UsedBuy = 0;
+                    Root->TryGetNumberField(TEXT("maxBuyCount"), MaxBuy);
+                    Root->TryGetNumberField(TEXT("usedBuyCount"), UsedBuy);
+                    Result.MaxBuyCount = MaxBuy;
+                    Result.UsedBuyCount = UsedBuy;
+
+                    const TArray<TSharedPtr<FJsonValue>>* ItemArray;
+                    if (Root->TryGetArrayField(TEXT("items"), ItemArray))
+                    {
+                        for (const TSharedPtr<FJsonValue>& Val : *ItemArray)
+                        {
+                            const TSharedPtr<FJsonObject>& Obj = Val->AsObject();
+                            if (!Obj.IsValid()) continue;
+
+                            FDreamShopItem Item;
+                            bool bBought = false;
+                            double Multiplier = 1.0;
+                            Obj->TryGetStringField(TEXT("itemCode"), Item.ItemCode);
+                            Obj->TryGetStringField(TEXT("grade"), Item.Grade);
+                            Obj->TryGetNumberField(TEXT("multiplier"), Multiplier);
+                            Obj->TryGetBoolField(TEXT("bought"), bBought);
+                            Item.Multiplier = (float)Multiplier;
+                            Item.bBought = bBought;
+
+                            // 옵션 파싱
+                            const TArray<TSharedPtr<FJsonValue>>* OptArray;
+                            if (Obj->TryGetArrayField(TEXT("options"), OptArray))
+                            {
+                                for (const TSharedPtr<FJsonValue>& OptVal : *OptArray)
+                                {
+                                    const TSharedPtr<FJsonObject>& OptObj = OptVal->AsObject();
+                                    if (!OptObj.IsValid()) continue;
+
+                                    FDreamShopOption Opt;
+                                    double OptValue = 1.0;
+                                    OptObj->TryGetStringField(TEXT("optionCode"), Opt.OptionCode);
+                                    OptObj->TryGetStringField(TEXT("grade"), Opt.Grade);
+                                    OptObj->TryGetNumberField(TEXT("value"), OptValue);
+                                    Opt.Value = (float)OptValue;
+                                    Item.Options.Add(Opt);
+                                }
+                            }
+
+                            Result.Items.Add(Item);
+                        }
+                    }
+                }
+
+                UE_LOG(LogTemp, Log, TEXT("[GetDreamShop] %s | Items: %d | MaxBuy: %d"),
+                    bOk ? TEXT("Success") : TEXT("Failed"),
+                    Result.Items.Num(),
+                    Result.MaxBuyCount);
+            }
+
+            OnComplete.ExecuteIfBound(Result);
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
+// BuyDreamShopItem
+// ================================================================
+
+void UEclassAPIHandler::BuyDreamShopItem(FString UserId, int32 ItemIndex, FOnDreamShopBuyResult OnComplete)
+{
+    TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
+    JsonObj->SetStringField(TEXT("userId"), UserId);
+    JsonObj->SetNumberField(TEXT("itemIndex"), ItemIndex);
+
+    FString JsonString;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+    FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/dream-shop/buy"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(JsonString);
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[BuyDreamShopItem] Request Failed"));
+                OnComplete.ExecuteIfBound(false);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                bool bOk = false;
+                FString Message;
+                Root->TryGetBoolField(TEXT("success"), bOk);
+                Root->TryGetStringField(TEXT("message"), Message);
+
+                UE_LOG(LogTemp, Log, TEXT("[BuyDreamShopItem] %s | %s"),
+                    bOk ? TEXT("Success") : TEXT("Failed"), *Message);
+
+                OnComplete.ExecuteIfBound(bOk);
+            }
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
 // EquipConsumable - Consumable 전용 장착
 // ================================================================
 
@@ -1179,6 +1326,10 @@ void UEclassAPIHandler::SaveEclassData()
     if (Save)
     {
         Save->StudentId = CachedData.StudentId;
+        Save->AcademicCurrency = CachedData.AcademicCurrency;
+        Save->ExtraCurrency = CachedData.ExtraCurrency;
+        Save->IdleCurrency = CachedData.IdleCurrency;
+        Save->Exp = CachedData.Exp;
         UGameplayStatics::SaveGameToSlot(Save, TEXT("EclassSlot"), 0);
     }
 }
@@ -1192,6 +1343,10 @@ void UEclassAPIHandler::LoadEclassData()
         if (Load)
         {
             CachedData.StudentId = Load->StudentId;
+            CachedData.AcademicCurrency = Load->AcademicCurrency;
+            CachedData.ExtraCurrency = Load->ExtraCurrency;
+            CachedData.IdleCurrency = Load->IdleCurrency;
+            CachedData.Exp = Load->Exp;
         }
     }
 }
