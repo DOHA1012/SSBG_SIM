@@ -1326,10 +1326,6 @@ void UEclassAPIHandler::SaveEclassData()
     if (Save)
     {
         Save->StudentId = CachedData.StudentId;
-        Save->AcademicCurrency = CachedData.AcademicCurrency;
-        Save->ExtraCurrency = CachedData.ExtraCurrency;
-        Save->IdleCurrency = CachedData.IdleCurrency;
-        Save->Exp = CachedData.Exp;
         UGameplayStatics::SaveGameToSlot(Save, TEXT("EclassSlot"), 0);
     }
 }
@@ -1343,10 +1339,6 @@ void UEclassAPIHandler::LoadEclassData()
         if (Load)
         {
             CachedData.StudentId = Load->StudentId;
-            CachedData.AcademicCurrency = Load->AcademicCurrency;
-            CachedData.ExtraCurrency = Load->ExtraCurrency;
-            CachedData.IdleCurrency = Load->IdleCurrency;
-            CachedData.Exp = Load->Exp;
         }
     }
 }
