@@ -106,6 +106,7 @@ USTRUCT(BlueprintType)
 struct FEclassItemInfo
 {
     GENERATED_BODY()
+    UPROPERTY(BlueprintReadWrite) int32   InventoryId = 0;
     UPROPERTY(BlueprintReadWrite) FString ItemCode;
     UPROPERTY(BlueprintReadWrite) FString Name;
     UPROPERTY(BlueprintReadWrite) FString Description;
@@ -303,6 +304,10 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "API")
     static void LoadEclassData();
+
+    // 캐시된 유저 데이터 조회 (자동로그인용)
+    UFUNCTION(BlueprintCallable, Category = "API")
+    static FEclassData GetCachedData();
 
 private:
     static FEclassData CachedData;

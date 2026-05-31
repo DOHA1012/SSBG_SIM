@@ -45,6 +45,7 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
     if (!Obj.IsValid()) return Item;
 
     int32 SlotIndex = 0;
+    int32 InventoryId = 0;
     bool bEquipped = false;
     Obj->TryGetStringField(TEXT("itemCode"), Item.ItemCode);
     Obj->TryGetStringField(TEXT("name"), Item.Name);
@@ -53,9 +54,11 @@ static FEclassItemInfo ParseItemJson(const TSharedPtr<FJsonObject>& Obj)
     Obj->TryGetStringField(TEXT("cosmeticSlot"), Item.CosmeticSlot);
     Obj->TryGetStringField(TEXT("obtainedAt"), Item.ObtainedAt);
     Obj->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
+    Obj->TryGetNumberField(TEXT("inventoryId"), InventoryId);
     Obj->TryGetBoolField(TEXT("isEquipped"), bEquipped);
 
     Item.SlotIndex = SlotIndex;
+    Item.InventoryId = InventoryId;
     Item.bIsEquipped = bEquipped;
 
     const TArray<TSharedPtr<FJsonValue>>* OptionsArr;
@@ -1190,11 +1193,23 @@ void UEclassAPIHandler::BuyDreamShopItem(FString UserId, int32 ItemIndex, FOnDre
             {
                 bool bOk = false;
                 FString Message;
+                int32 ExpCost = 0;
                 Root->TryGetBoolField(TEXT("success"), bOk);
                 Root->TryGetStringField(TEXT("message"), Message);
+                Root->TryGetNumberField(TEXT("expCost"), ExpCost);
 
-                UE_LOG(LogTemp, Log, TEXT("[BuyDreamShopItem] %s | %s"),
-                    bOk ? TEXT("Success") : TEXT("Failed"), *Message);
+                // 구매 성공 시 재화 캐시 업데이트
+                if (bOk)
+                {
+                    const TSharedPtr<FJsonObject>* UserObj;
+                    if (Root->TryGetObjectField(TEXT("current"), UserObj))
+                    {
+                        UEclassAPIHandler::ApplyAndCache(ParseUserJson(*UserObj));
+                    }
+                }
+
+                UE_LOG(LogTemp, Log, TEXT("[BuyDreamShopItem] %s | %s | ExpCost: %d"),
+                    bOk ? TEXT("Success") : TEXT("Failed"), *Message, ExpCost);
 
                 OnComplete.ExecuteIfBound(bOk);
             }
@@ -1317,6 +1332,11 @@ void UEclassAPIHandler::ApplyAndCache(FEclassData NewData)
         CachedData.ExtraCurrency,
         CachedData.IdleCurrency,
         CachedData.Exp);
+}
+
+FEclassData UEclassAPIHandler::GetCachedData()
+{
+    return CachedData;
 }
 
 void UEclassAPIHandler::SaveEclassData()
