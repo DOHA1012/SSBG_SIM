@@ -1359,6 +1359,10 @@ void UEclassAPIHandler::LoadEclassData()
         if (Load)
         {
             CachedData.StudentId = Load->StudentId;
+            return;
         }
     }
+
+    // 세이브 파일이 존재하지 않거나 로드에 실패한 경우, 메모리 캐시도 초기화하여 자동 로그인을 방지합니다.
+    CachedData = FEclassData();
 }
