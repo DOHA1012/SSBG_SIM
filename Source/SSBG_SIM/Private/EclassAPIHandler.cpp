@@ -420,6 +420,63 @@ void UEclassAPIHandler::GainCurrency(FString UserId, int32 Amount, FString Curre
 }
 
 // ================================================================
+// CollectIdle - Idle 재화 수령
+// ================================================================
+
+void UEclassAPIHandler::CollectIdle(FString UserId, FOnEclassDataReceived OnComplete)
+{
+    TSharedPtr<FJsonObject> JsonObj = MakeShareable(new FJsonObject);
+    JsonObj->SetStringField(TEXT("userId"), UserId);
+
+    FString JsonString;
+    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
+    FJsonSerializer::Serialize(JsonObj.ToSharedRef(), Writer);
+
+    TSharedRef<IHttpRequest> Request = FHttpModule::Get().CreateRequest();
+    Request->SetURL(GAME_SERVER + TEXT("/idle/collect"));
+    Request->SetVerb("POST");
+    Request->SetHeader("Content-Type", "application/json");
+    Request->SetContentAsString(JsonString);
+
+    Request->OnProcessRequestComplete().BindLambda(
+        [OnComplete, UserId](FHttpRequestPtr, FHttpResponsePtr Res, bool bSuccess)
+        {
+            FEclassData Data;
+
+            if (!bSuccess || !Res.IsValid())
+            {
+                UE_LOG(LogTemp, Error, TEXT("[CollectIdle] Request Failed"));
+                OnComplete.ExecuteIfBound(Data);
+                return;
+            }
+
+            TSharedPtr<FJsonObject> Root;
+            TSharedRef<TJsonReader<>> Reader =
+                TJsonReaderFactory<>::Create(Res->GetContentAsString());
+
+            if (FJsonSerializer::Deserialize(Reader, Root))
+            {
+                int32 Gained = 0;
+                Root->TryGetNumberField(TEXT("finalAmount"), Gained);
+
+                const TSharedPtr<FJsonObject>* UserObj;
+                if (Root->TryGetObjectField(TEXT("current"), UserObj))
+                {
+                    Data = ParseUserJson(*UserObj);
+                    UEclassAPIHandler::ApplyAndCache(Data);
+                }
+
+                UE_LOG(LogTemp, Log, TEXT("[CollectIdle] %s | Gained: %d | Idle: %d"),
+                    *UserId, Gained, Data.IdleCurrency);
+            }
+
+            OnComplete.ExecuteIfBound(Data);
+        });
+
+    Request->ProcessRequest();
+}
+
+// ================================================================
 // 7. RequestDailyReset
 // ================================================================
 

@@ -245,6 +245,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "API")
     static void GainCurrency(FString UserId, int32 Amount, FString CurrencyType);
 
+    // Idle 재화 수령 (30초당 50 기본 + 배율 적용)
+    UFUNCTION(BlueprintCallable, Category = "API|Currency")
+    static void CollectIdle(FString UserId, FOnEclassDataReceived OnComplete);
+
     UFUNCTION(BlueprintCallable, Category = "API")
     static void GetServerTime(FOnServerTimeReceived OnComplete);
 
